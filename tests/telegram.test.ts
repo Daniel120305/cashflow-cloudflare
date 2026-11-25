@@ -15,7 +15,9 @@ const stamp = Date.now();
 const email = `tg${stamp}@gmail.com`;
 const sent: any[] = [];
 const realFetch = globalThis.fetch;
-globalThis.fetch = (async (url: any, init?: any) => {
+// Igual ao Worker: fetch chamado como método de outro objeto falha.
+globalThis.fetch = (async function (this: any, url: any, init?: any) {
+  if (this !== undefined && this !== globalThis) throw new TypeError("Illegal invocation");
   const u = String(url);
   if (u.startsWith("https://api.telegram.org/")) {
     const method = u.split("/").pop();

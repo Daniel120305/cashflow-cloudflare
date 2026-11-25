@@ -19,7 +19,8 @@ export async function processUpdate(
         "UPDATE telegram_updates SET processado_em=NOW(),payload='{}'::jsonb,erro=FALSE WHERE update_id=$1",
         [job.update_id],
       );
-    } catch {
+    } catch (error) {
+      console.error("Telegram: falha ao processar mensagem", job.update_id, String((error as Error)?.message ?? error));
       await tx.query(
         "UPDATE telegram_updates SET tentativas=tentativas+1,proxima_tentativa=NOW()+INTERVAL '10 seconds',erro=TRUE WHERE update_id=$1",
         [job.update_id],
@@ -43,7 +44,8 @@ export async function processNotification(
       await tx.query("UPDATE notificacoes SET entregue_em=NOW() WHERE id=$1", [
         job.id,
       ]);
-    } catch {
+    } catch (error) {
+      console.error("Telegram: falha ao enviar alerta", job.id, String((error as Error)?.message ?? error));
       await tx.query(
         "UPDATE notificacoes SET tentativas=tentativas+1,proxima_tentativa=NOW()+INTERVAL '10 seconds' WHERE id=$1",
         [job.id],

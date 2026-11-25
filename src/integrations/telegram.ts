@@ -26,7 +26,9 @@ const normalize = (s: string) => s.replace(/^@/, "").toLowerCase();
 export class TelegramService {
   private fetcher: typeof fetch;
   constructor(private deps: Deps) {
-    this.fetcher = deps.fetcher ?? fetch;
+    // No Worker, fetch guardado num objeto e chamado como this.fetcher(...)
+    // dá "Illegal invocation"; por isso fica embrulhado numa função.
+    this.fetcher = deps.fetcher ?? ((input, init) => fetch(input, init));
   }
   private async api(method: string, payload: object) {
     if (!this.deps.token) throw new Error("Telegram não configurado.");
