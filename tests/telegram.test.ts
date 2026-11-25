@@ -26,6 +26,7 @@ globalThis.fetch = (async function (this: any, url: any, init?: any) {
     if (method === "getWebhookInfo") return Response.json({ ok: true, result: { url: "" } });
     if (method === "getMyDescription") return Response.json({ ok: true, result: { description: "" } });
     if (method === "getMyCommands") return Response.json({ ok: true, result: [] });
+    if (method === "getMyName") return Response.json({ ok: true, result: { name: "CashFlow" } });
     return Response.json({ ok: true, result: true });
   }
   return realFetch(url, init);

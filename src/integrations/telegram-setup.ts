@@ -24,7 +24,7 @@ export const COMMANDS = [
   { command: "vincular", description: "🔗 Vincular sua conta (código do Perfil)" },
   { command: "desvincular", description: "⛔ Desligar este Telegram da conta" },
 ];
-export const BOT_NAME = "CashFlow";
+export const BOT_NAME = "CashFlow - Assistente Financeiro";
 // "O que este bot faz?" (aparece antes de iniciar a conversa).
 export const BOT_DESCRIPTION =
   "Seu assistente financeiro do CashFlow 💰\n\n" +
@@ -63,7 +63,14 @@ export async function ensureProfile(
   const current = await call(token, "getMyDescription", {}, fetcher);
   const cmds = await call(token, "getMyCommands", {}, fetcher);
   const sameCommands = JSON.stringify((cmds ?? []).map((c: any) => c.command)) === JSON.stringify(COMMANDS.map((c) => c.command));
-  if (current?.description === BOT_DESCRIPTION && sameCommands) return "ok";
+  const name = await call(token, "getMyName", {}, fetcher).catch(() => ({ name: BOT_NAME }));
+  // Só o nome mudou: troca o nome e não reenvia a foto.
+  if (current?.description === BOT_DESCRIPTION && sameCommands) {
+    if (name?.name === BOT_NAME) return "ok";
+    await call(token, "setMyName", { name: BOT_NAME }, fetcher);
+    console.log("[CashFlow] Nome do bot atualizado:", BOT_NAME);
+    return "nome";
+  }
   await call(token, "setMyCommands", { commands: COMMANDS }, fetcher);
   await call(token, "setMyName", { name: BOT_NAME }, fetcher).catch((e) => console.warn(String(e)));
   await call(token, "setMyShortDescription", { short_description: BOT_SHORT }, fetcher);
