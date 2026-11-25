@@ -301,7 +301,7 @@
         { keys: ["alerta", "aviso de gasto", "notificacao", "notificacoes"], r: () => R("Defina um gasto máximo mensal no perfil: o CashFlow avisa no sininho 🔔 quando você chegar a 80% e a 100% dele.", { acoes: [{ label: "🎯 Definir meu limite", acao: "limite" }], sugestoes: ["Quanto ainda posso gastar?"] }) },
         { keys: ["calculadora", "ferramenta", "juros", "financiamento", "conversor", "moeda", "salario liquido", "inss", "irrf"], r: () => R("Na aba Ferramentas há calculadora de salário líquido (CLT 2026), juros compostos, financiamento e conversor de moedas.", { acoes: [{ label: "🔧 Abrir Ferramentas", acao: "ferramentas" }] }) },
         { keys: ["taxa", "bcb", "banco central", "juros dos bancos"], r: () => R("Na aba Taxas BCB você compara as taxas médias de juros dos bancos, publicadas pelo Banco Central.", { acoes: [{ label: "🏦 Abrir Taxas BCB", acao: "taxas" }] }) },
-        { keys: ["telegram", "bot do telegram"], r: () => R("No perfil você pode vincular o Telegram e registrar gastos mandando mensagem para o bot do CashFlow.", { acoes: [{ label: "👤 Abrir perfil", acao: "perfil" }] }) },
+        { keys: ["telegram", "bot do telegram"], r: () => R("Conecte o Telegram e registre gastos mandando mensagem (\"despesa mercado 35,90\") ou a foto do cupom fiscal. Também dá para ver saldo, extrato e receber alertas de limite.", { acoes: [{ label: "📲 Conectar Telegram", acao: "telegram" }] }) },
         { keys: ["senha", "trocar senha", "esqueci"], r: () => R("Para trocar a senha, saia da conta e use \"Esqueceu a senha?\" na tela de login: enviamos um link para o seu email.") },
         { keys: ["perfil", "endereco", "meus dados", "cpf", "telefone", "excluir conta", "apagar conta"], r: () => R("No perfil você atualiza nome, email, endereço, dados financeiros e preferências. Lá também fica a opção de excluir a conta.", { acoes: [{ label: "👤 Abrir perfil", acao: "perfil" }] }) },
         { keys: ["grafico"], r: () => R("O gráfico Resumo por Categoria, no fim do Dashboard, mostra quanto entrou e saiu em cada categoria no período filtrado.", { sugestoes: ["Onde mais gastei?"] }) },
@@ -392,6 +392,7 @@
             case "aparencia": document.getElementById("themePanel")?.classList.remove("hidden-theme-panel"); fecharChat(); break;
             case "limite": window.location.href = "../CashFlow_Tela_Perfil/perfil.html#gasto-maximo"; break;
             case "perfil": window.location.href = "../CashFlow_Tela_Perfil/perfil.html"; break;
+            case "telegram": fechar(); window.CashFlowTelegram ? window.CashFlowTelegram.abrir() : (window.location.href = "../CashFlow_Tela_Perfil/perfil.html#telegram"); break;
         }
     }
 

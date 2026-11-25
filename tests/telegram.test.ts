@@ -124,5 +124,10 @@ test("vincular pelo código, registrar despesa, /saldo e /extrato", async () => 
   assert.match(await cbk(undoId), /Apagado/);
   assert.equal((await call("GET", "/api/transacoes")).data.transactions.length, 1);
   assert.match(await cbk("desvincular:sim"), /desvinculado/);
+  // Desconectar pelo site também funciona (com RLS do usuário).
+  await call("POST", "/api/telegram", { acao: "gerar", nome_telegram: "Amanda_Teste" });
+  const off = await call("POST", "/api/telegram", { acao: "desvincular" });
+  assert.equal(off.status, 200, JSON.stringify(off.data));
+  assert.equal((await call("POST", "/api/telegram", { acao: "verificar" })).data.tem_codigo, false);
   assert.match(await reply("/saldo"), /vincule sua conta/);
 });

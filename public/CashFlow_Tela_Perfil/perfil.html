@@ -32,7 +32,7 @@
             <a class="user-name" id="userName">Usuário</a>
             <hr>
             <a href="../CashFlow_Tela_HomePage/home.html" id="editProfileBtn">🏠 Home</a>
-            <a href="#" id="btnTelegram"><img src="../image.png" class="imgTelegram" alt="">Código</a>
+            <a href="#" data-telegram-open>📲 Telegram <span data-telegram-status></span></a>
 
 
 
@@ -53,6 +53,16 @@
             <p>Atualize suas informações pessoais, endereço, preferências financeiras e defina seu gasto máximo mensal para receber alertas no CashFlow.</p>
         </div>
         <div class="profile-hero-icon">👤</div>
+    </section>
+
+    <!-- Telegram: seção visível no perfil -->
+    <section class="tg-profile-card" id="telegram">
+        <div class="tg-profile-ico" aria-hidden="true">📲</div>
+        <div class="tg-profile-txt">
+            <h2>Telegram <span data-telegram-status></span></h2>
+            <p>Registre gastos por mensagem ou foto do cupom, consulte o saldo e receba alertas de limite pelo bot do CashFlow.</p>
+        </div>
+        <button type="button" class="tg-profile-btn" data-telegram-open data-telegram-label>Conectar Telegram</button>
     </section>
 
     <form class="profile-form">
@@ -192,34 +202,7 @@
 <script src="/money-mask.js"></script>
 <script src="/cep.js"></script>
 <script src="perfil.js"></script>
-<!-- MODAL TELEGRAM -->
-<div id="modalCodigo" class="modal" aria-labelledby="tgTitle">
-  <div class="modal-content tg-modal">
-    <button type="button" class="fechar" aria-label="Fechar">&times;</button>
-    <div class="tg-icon" aria-hidden="true"><img src="../image.png" alt=""></div>
-    <h2 class="h2Code" id="tgTitle">Vincular Telegram</h2>
-    <p class="textCode">Registre gastos e receba alertas pelo bot do CashFlow.</p>
-    <span id="tgBadge" class="tg-badge">Verificando...</span>
-
-    <div class="tg-field">
-      <label for="inputTelegram">Seu nome de usuário no Telegram</label>
-      <div class="tg-input"><span aria-hidden="true">@</span><input type="text" id="inputTelegram" placeholder="seuusuario" class="inputTelegram" maxlength="33" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
-      <small class="tg-hint">Você encontra em Telegram &gt; Configurações &gt; Nome de usuário. Use de 5 a 32 caracteres: letras, números ou sublinhado ( _ ).</small>
-    </div>
-
-    <button id="gerarCodigoBtn" type="button">Gerar código</button>
-
-    <div id="codigoBox" class="tg-code" hidden>
-      <p>Envie esta mensagem ao bot, no chat privado, em até <strong>10 minutos</strong>:</p>
-      <a id="abrirBot" class="tg-open" target="_blank" rel="noopener" hidden>Abrir no Telegram e vincular</a>
-      <code id="codigoGerado"></code>
-      <button type="button" id="copiarCodigo">Copiar mensagem</button>
-      <small id="codigoValidade"></small>
-    </div>
-
-    <small id="statusMsg" class="tg-status" role="status"></small>
-  </div>
-</div>
+<script src="/telegram-connect.js"></script>
 </body>
 
 </html>

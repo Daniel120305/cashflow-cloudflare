@@ -8,7 +8,7 @@ import { miniPool } from "./pgmini.js";
 process.env.NODE_ENV = "development";
 process.env.APP_ORIGIN = "http://localhost:8787";
 process.env.EMAIL_TOKEN_SECRET = "dev";
-const env = { NODE_ENV: "development", APP_ORIGIN: "http://localhost:8787", EMAIL_TOKEN_SECRET: "dev" } as unknown as Env;
+const env = { NODE_ENV: "development", APP_ORIGIN: "http://localhost:8787", EMAIL_TOKEN_SECRET: "dev", TELEGRAM_BOT_USERNAME: "CashFlowPIBot" } as unknown as Env;
 const db = wrapPool(miniPool() as any);
 const types: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".png": "image/png", ".json": "application/json" };
 http.createServer(async (req, res) => {

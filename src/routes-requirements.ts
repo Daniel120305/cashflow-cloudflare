@@ -244,6 +244,10 @@ export async function requirementsRoutes(
         message:
           "Por segurança, o token só é exibido ao gerar. Gere outro se necessário.",
       };
+    if (b.acao === "desvincular") {
+      await scoped.query("DELETE FROM telegram_vinculos WHERE usuario_id=$1", [uid]);
+      return { status: "success", message: "Telegram desconectado." };
+    }
     if (b.acao !== "gerar") throw new HttpError(400, "Ação inválida.");
     const username = text(b.nome_telegram, "username Telegram", 33)
       .replace(/^@/, "")

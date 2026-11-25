@@ -965,3 +965,21 @@ body.theme-dark .profile-form .money-hint { color: #fca5a5; }
 body.theme-dark { color-scheme: dark; }
 body.theme-light { color-scheme: light; }
 body.theme-dark select option { background: #0f172a; color: #e5e7eb; }
+
+/* Seção do Telegram no perfil */
+.tg-profile-card { display: flex; gap: 16px; align-items: center; margin: 0 0 24px; padding: 18px 20px; border-radius: 18px; background: linear-gradient(135deg, #e0f2fe, #f0f9ff 60%); border: 1px solid #bae6fd; }
+.tg-profile-ico { flex: none; width: 52px; height: 52px; border-radius: 50%; background: linear-gradient(135deg, #2aabee, #229ed9); display: flex; align-items: center; justify-content: center; font-size: 26px; }
+.tg-profile-txt { flex: 1; min-width: 0; }
+.tg-profile-txt h2 { margin: 0 0 4px; font-size: 1.1rem; color: #0f172a; }
+.tg-profile-txt p { margin: 0; color: #475569; font-size: 0.92rem; line-height: 1.4; }
+.tg-profile-btn { flex: none; min-height: 44px; padding: 8px 18px; border: 0; border-radius: 12px; background: #229ed9; color: #fff; font-weight: 800; cursor: pointer; }
+.tg-profile-btn:hover { background: #1b8cc2; }
+@media (max-width: 640px) {
+  .tg-profile-card { flex-wrap: wrap; align-items: flex-start; padding: 16px; }
+  .tg-profile-ico { width: 44px; height: 44px; font-size: 22px; }
+  .tg-profile-txt { flex: 1 1 calc(100% - 60px); }
+  .tg-profile-btn { width: 100%; }
+}
+body.theme-dark .tg-profile-card { background: linear-gradient(135deg, #0c4a6e, #0f172a 70%); border-color: #075985; }
+body.theme-dark .tg-profile-txt h2 { color: #e2e8f0; }
+body.theme-dark .tg-profile-txt p { color: #cbd5e1; }
