@@ -25,7 +25,7 @@ document.addEventListener('DOMContentLoaded', function () {
     fetch('/api/perfil', { credentials: 'include' })
         .then((r) => {
             if (r.status === 401) {
-                window.location.replace('/CashFlow_Tela_de_Cadastro/dadospessoais.html');
+                window.location.replace('/cadastro');
                 return null;
             }
             return r.ok ? r.json() : null;
@@ -43,7 +43,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Navegação entre passos
     document.querySelector('.btn-secondary').addEventListener('click', function () {
-        window.location.href = '../CashFlow_Tela_de_Cadastro/dadospessoais.html';
+        window.location.href = '/cadastro';
     });
 
     document.getElementById('skipAddress').addEventListener('click', () => {
@@ -74,7 +74,7 @@ document.addEventListener('DOMContentLoaded', function () {
             .then(res => res.json())
             .then(result => {
                 if (result.status === "success") {
-                    window.location.href = "finalizacao.html";
+                    window.location.href = "/cadastro/finalizacao";
                 } else {
                     mostrarAlerta(result.message || "Não foi possível salvar o endereço.");
                 }

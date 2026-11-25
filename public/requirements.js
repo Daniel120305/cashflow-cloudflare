@@ -233,7 +233,7 @@ document.addEventListener("DOMContentLoaded", () => {
     section.innerHTML =
       '<h2 id="accountCardTitle">Privacidade e conta</h2>' +
       '<p class="account-lead">Veja como seus dados são usados e gerencie seu consentimento.</p>' +
-      '<a class="account-link" href="/privacidade.html">📄 Política de privacidade e uso dos dados<span aria-hidden="true">›</span></a>' +
+      '<a class="account-link" href="/privacidade">📄 Política de privacidade e uso dos dados<span aria-hidden="true">›</span></a>' +
       '<form id="consentForm" class="account-consent"><label class="account-check"><input type="checkbox" id="acceptPrivacy" required><span>Li e aceito o tratamento descrito na política</span></label><button type="submit">Registrar consentimento</button></form>' +
       '<details class="account-danger"><summary>Excluir minha conta</summary><p>A exclusão remove permanentemente sua conta e os dados financeiros associados. Não é possível desfazer.</p><form id="deleteAccount"><label for="deletePassword">Senha atual <small>(contas criadas pelo Google podem deixar em branco)</small></label><input id="deletePassword" type="password" autocomplete="current-password"><label for="deleteConfirmation">Digite EXCLUIR para confirmar</label><input id="deleteConfirmation" pattern="EXCLUIR" required autocapitalize="characters"><button type="submit">Excluir conta permanentemente</button></form></details>' +
       '<p id="privacyStatus" class="account-status" role="status"></p>';
@@ -277,7 +277,7 @@ document.addEventListener("DOMContentLoaded", () => {
           senha: document.getElementById("deletePassword").value,
           confirmacao: document.getElementById("deleteConfirmation").value,
         });
-        location.replace("/CashFlow_Tela_de_Login/login.html");
+        location.replace("/login");
       } catch (error) {
         document.getElementById("privacyStatus").dataset.type = "error";
         document.getElementById("privacyStatus").textContent = error.message;

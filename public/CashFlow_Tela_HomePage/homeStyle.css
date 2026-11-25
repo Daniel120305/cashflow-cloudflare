@@ -3443,3 +3443,12 @@ body.theme-dark .quick-category .category-delete:hover { background: rgba(220, 3
 #chatbotPanel .cashbot-input-area { min-width: 0; }
 #chatbotPanel .cashbot-input-area input { min-width: 0; flex: 1 1 auto; }
 #chatbotPanel .cashbot-input-area button { flex: none; }
+
+/* CashBot: lista de comandos (Telegram) */
+.cashbot-cmds { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+.cashbot-cmds li { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 10px; background: rgba(34, 158, 217, 0.08); }
+.cashbot-cmds code { align-self: flex-start; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.85rem; font-weight: 700; color: #0369a1; background: rgba(34, 158, 217, 0.14); border-radius: 6px; padding: 1px 7px; white-space: normal; word-break: break-word; }
+.cashbot-cmds span { font-size: 0.85rem; color: #475569; line-height: 1.35; }
+body.theme-dark .cashbot-cmds li { background: rgba(56, 189, 248, 0.1); }
+body.theme-dark .cashbot-cmds code { color: #7dd3fc; background: rgba(56, 189, 248, 0.16); }
+body.theme-dark .cashbot-cmds span { color: #cbd5e1; }

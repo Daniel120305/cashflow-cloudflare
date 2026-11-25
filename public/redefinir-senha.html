@@ -34,9 +34,9 @@
       <div class="auth-icon" aria-hidden="true">✅</div>
       <h1>Senha alterada</h1>
       <p class="auth-lead">Sua senha foi atualizada e as sessões abertas foram encerradas. Entre de novo com a nova senha.</p>
-      <a class="auth-submit" style="display:grid;place-items:center;text-decoration:none" href="/CashFlow_Tela_de_Login/login.html">Ir para o login</a>
+      <a class="auth-submit" style="display:grid;place-items:center;text-decoration:none" href="/login">Ir para o login</a>
     </section>
-    <p class="auth-links" id="voltar"><a href="/CashFlow_Tela_de_Login/login.html">← Voltar ao login</a></p>
+    <p class="auth-links" id="voltar"><a href="/login">← Voltar ao login</a></p>
   </main>
 </div>
 <script>
@@ -53,7 +53,7 @@
   CashFlowAuth.attachStrengthMeter(senha);
   function alerta(tipo, texto) { status.className = "form-alert show " + tipo; status.innerHTML = texto; }
   if (!token) {
-    alerta("error", 'Este link está incompleto. <a href="/recuperar-senha.html">Peça um novo link</a>.');
+    alerta("error", 'Este link está incompleto. <a href="/recuperar-senha">Peça um novo link</a>.');
     // Sem o link do email não há como salvar: o formulário fica desativado.
     form.querySelectorAll("input,button").forEach(function (el) { el.disabled = true; });
     return;
@@ -75,7 +75,7 @@
       var d = await r.json().catch(function () { return {}; });
       if (!r.ok) {
         var texto = (d.message || "Não foi possível alterar a senha.").replace(/[&<>]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]; });
-        alerta("error", texto + (r.status === 400 && /link/i.test(texto) ? ' <a href="/recuperar-senha.html">Pedir novo link</a>' : ""));
+        alerta("error", texto + (r.status === 400 && /link/i.test(texto) ? ' <a href="/recuperar-senha">Pedir novo link</a>' : ""));
         return;
       }
       document.getElementById("formulario").hidden = true;

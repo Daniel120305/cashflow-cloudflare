@@ -162,7 +162,7 @@
       if (response.ok && result.status === "success") {
         try { sessionStorage.removeItem(DRAFT_KEY); } catch { /* ok */ }
         showAlert("success", "🎉 Conta criada! Abrindo o CashFlow...");
-        setTimeout(() => window.location.assign(result.proxima || "/CashFlow_Tela_HomePage/home.html?bemvindo=1"), 600);
+        setTimeout(() => window.location.assign(result.proxima || "/home?bemvindo=1"), 600);
         return;
       }
       if (response.status === 409) {
@@ -200,7 +200,7 @@
       }
       try { sessionStorage.removeItem(DRAFT_KEY); } catch { /* ok */ }
       showAlert("success", data.novo ? "🎉 Conta criada! Abrindo o CashFlow..." : "Você já tinha conta. Entrando...");
-      setTimeout(() => window.location.assign(data.proxima || "/CashFlow_Tela_HomePage/home.html"), 600);
+      setTimeout(() => window.location.assign(data.proxima || "/home"), 600);
     } catch {
       showAlert("error", "Sem conexão com o servidor. Tente novamente.");
     }

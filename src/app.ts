@@ -306,7 +306,7 @@ export async function buildApp(
       later(sendConfirmationFor(r.rows[0].id, address, values[0] as string));
       return success({
         message: "Conta criada!",
-        proxima: "/CashFlow_Tela_HomePage/home.html?bemvindo=1",
+        proxima: "/home?bemvindo=1",
       });
     },
   );
@@ -394,8 +394,8 @@ export async function buildApp(
         novo,
         // Conta nova vai direto para o app (endereço e finanças ficam no perfil, opcionais).
         proxima: novo
-          ? "/CashFlow_Tela_HomePage/home.html?bemvindo=1"
-          : "/CashFlow_Tela_HomePage/home.html",
+          ? "/home?bemvindo=1"
+          : "/home",
       });
     },
   );

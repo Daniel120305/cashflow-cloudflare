@@ -99,7 +99,7 @@
     fetch("/api/perfil", { credentials: "include" })
       .then((r) => {
         if (r.status === 401) {
-          window.location.replace("/CashFlow_Tela_de_Cadastro/dadospessoais.html");
+          window.location.replace("/cadastro");
           return null;
         }
         return r.ok ? r.json() : null;
@@ -125,7 +125,7 @@
     form.addEventListener("submit", (e) => e.preventDefault());
 
     voltarBtn.addEventListener("click", () => {
-      window.location.href = "endereco.html";
+      window.location.href = "/cadastro/endereco";
     });
 
     document.getElementById("skipFinance").addEventListener("click", () => {
@@ -149,7 +149,7 @@
         try { data = JSON.parse(text); } catch { data = { status: "error", message: "Resposta inválida do servidor." }; }
         if (data.status === "success") {
           mostrarAlerta("success", "🎉 Cadastro concluído! Abrindo o CashFlow...");
-          setTimeout(() => window.location.assign("/CashFlow_Tela_HomePage/home.html"), 900);
+          setTimeout(() => window.location.assign("/home"), 900);
           return;
         }
         mostrarAlerta("error", data.message || "Não foi possível salvar. Tente novamente.");

@@ -5,7 +5,7 @@ window.cashflowEscape = (value) => {
   return element.innerHTML;
 };
 (async function () {
-  const login = "/CashFlow_Tela_de_Login/login.html";
+  const login = "/login";
   try {
     const response = await fetch("/api/perfil", {
       credentials: "include",
@@ -84,7 +84,7 @@ window.cashflowEscape = (value) => {
   const expire = () => {
     if (Date.now() - lastActivity >= timeout) {
       fetch("/api/logout", { method: "POST", credentials: "include" }).finally(
-        () => location.replace("/CashFlow_Tela_de_Login/login.html"),
+        () => location.replace("/login"),
       );
     }
   };
@@ -121,7 +121,7 @@ window.cashflowEscape = (value) => {
         })
           .then((r) => {
             if (r.status === 401)
-              location.replace("/CashFlow_Tela_de_Login/login.html");
+              location.replace("/login");
           })
           .catch(() => {});
       },

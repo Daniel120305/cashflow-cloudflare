@@ -8,8 +8,8 @@ const appLink = (path: string, token: string) => {
   url.searchParams.set("token", token);
   return url.toString();
 };
-const resetLink = (token: string) => appLink("/redefinir-senha.html", token);
-const confirmLink = (token: string) => appLink("/confirmar-email.html", token);
+const resetLink = (token: string) => appLink("/redefinir-senha", token);
+const confirmLink = (token: string) => appLink("/confirmar-email", token);
 
 const escapeHtml = (value: string) =>
   value.replace(

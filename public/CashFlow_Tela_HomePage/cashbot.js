@@ -301,7 +301,25 @@
         { keys: ["alerta", "aviso de gasto", "notificacao", "notificacoes"], r: () => R("Defina um gasto máximo mensal no perfil: o CashFlow avisa no sininho 🔔 quando você chegar a 80% e a 100% dele.", { acoes: [{ label: "🎯 Definir meu limite", acao: "limite" }], sugestoes: ["Quanto ainda posso gastar?"] }) },
         { keys: ["calculadora", "ferramenta", "juros", "financiamento", "conversor", "moeda", "salario liquido", "inss", "irrf"], r: () => R("Na aba Ferramentas há calculadora de salário líquido (CLT 2026), juros compostos, financiamento e conversor de moedas.", { acoes: [{ label: "🔧 Abrir Ferramentas", acao: "ferramentas" }] }) },
         { keys: ["taxa", "bcb", "banco central", "juros dos bancos"], r: () => R("Na aba Taxas BCB você compara as taxas médias de juros dos bancos, publicadas pelo Banco Central.", { acoes: [{ label: "🏦 Abrir Taxas BCB", acao: "taxas" }] }) },
-        { keys: ["telegram", "bot do telegram"], r: () => R("Conecte o Telegram e registre gastos mandando mensagem (\"despesa mercado 35,90\") ou a foto do cupom fiscal. Também dá para ver saldo, extrato e receber alertas de limite.", { acoes: [{ label: "📲 Conectar Telegram", acao: "telegram" }] }) },
+        { keys: ["telegram", "bot do telegram", "vincular", "cupom", "nota fiscal"], r: () => {
+            const conectado = window.CashFlowTelegram?.estado()?.vinculado;
+            return R(conectado
+                ? "📲 Seu Telegram já está conectado ao CashFlow! Fale com o bot @CashFlowPIBot:"
+                : "📲 Com o bot do CashFlow no Telegram você controla suas finanças por mensagem. Veja o que dá para fazer:", {
+                itens: [
+                    ["/despesa mercado 35,90", "registra uma despesa"],
+                    ["/receita salário 3000", "registra uma receita"],
+                    ["📷 foto do cupom fiscal", "leio o valor e você confirma"],
+                    ["/saldo · /mes", "saldo total e resumo do mês"],
+                    ["/extrato · /hoje", "últimos lançamentos"],
+                    ["/categorias · /limite", "onde mais gastou e quanto falta"],
+                    ["🔔 alertas automáticos", "aviso ao chegar a 80% e 100% do gasto máximo"],
+                ],
+                lista: "comandos",
+                acoes: [{ label: conectado ? "📲 Gerenciar Telegram" : "📲 Conectar Telegram (1 minuto)", acao: "telegram" }],
+                sugestoes: ["Quanto ainda posso gastar?", "Resumo do mês"],
+            });
+        } },
         { keys: ["senha", "trocar senha", "esqueci"], r: () => R("Para trocar a senha, saia da conta e use \"Esqueceu a senha?\" na tela de login: enviamos um link para o seu email.") },
         { keys: ["perfil", "endereco", "meus dados", "cpf", "telefone", "excluir conta", "apagar conta"], r: () => R("No perfil você atualiza nome, email, endereço, dados financeiros e preferências. Lá também fica a opção de excluir a conta.", { acoes: [{ label: "👤 Abrir perfil", acao: "perfil" }] }) },
         { keys: ["grafico"], r: () => R("O gráfico Resumo por Categoria, no fim do Dashboard, mostra quanto entrou e saiu em cada categoria no período filtrado.", { sugestoes: ["Onde mais gastei?"] }) },
@@ -390,9 +408,9 @@
             case "ferramentas": irParaAba("tools"); fechar(); break;
             case "taxas": irParaAba("market"); fechar(); break;
             case "aparencia": document.getElementById("themePanel")?.classList.remove("hidden-theme-panel"); fecharChat(); break;
-            case "limite": window.location.href = "../CashFlow_Tela_Perfil/perfil.html#gasto-maximo"; break;
-            case "perfil": window.location.href = "../CashFlow_Tela_Perfil/perfil.html"; break;
-            case "telegram": fechar(); window.CashFlowTelegram ? window.CashFlowTelegram.abrir() : (window.location.href = "../CashFlow_Tela_Perfil/perfil.html#telegram"); break;
+            case "limite": window.location.href = "/perfil#gasto-maximo"; break;
+            case "perfil": window.location.href = "/perfil"; break;
+            case "telegram": fechar(); window.CashFlowTelegram ? window.CashFlowTelegram.abrir() : (window.location.href = "/perfil#telegram"); break;
         }
     }
 
@@ -418,7 +436,20 @@
         if (msg.itens?.length) {
             const ul = document.createElement("ul");
             ul.className = "cashbot-itens";
-            msg.itens.forEach(([k, v]) => {
+            // Lista de comandos (ex.: Telegram): comando em destaque e a explicação embaixo.
+            if (msg.lista === "comandos") {
+                ul.className = "cashbot-cmds";
+                msg.itens.forEach(([k, v]) => {
+                    const li = document.createElement("li");
+                    const c = document.createElement("code");
+                    c.textContent = k;
+                    const d = document.createElement("span");
+                    d.textContent = v;
+                    li.append(c, d);
+                    ul.appendChild(li);
+                });
+                bubble.appendChild(ul);
+            } else msg.itens.forEach(([k, v]) => {
                 const li = document.createElement("li");
                 const a = document.createElement("span");
                 a.className = "cashbot-item-k";

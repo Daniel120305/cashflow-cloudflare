@@ -233,7 +233,7 @@ function setupForm() {
             if (result.status === "success") {
                 mostrarStatus("success", "✓ Dados salvos! Voltando para a tela inicial...");
                 // Depois de salvar, a pessoa volta para o Dashboard.
-                setTimeout(() => window.location.assign("../CashFlow_Tela_HomePage/home.html"), 1400);
+                setTimeout(() => window.location.assign("/home"), 1400);
                 await carregarPerfil();
                 const saved = JSON.parse(formData.get('preferencias'));
                 window.cashflowPreferences = saved;

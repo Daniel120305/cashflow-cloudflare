@@ -139,7 +139,7 @@ form.addEventListener('submit', async (e) => {
             applyRemember(rememberInput.checked);
             showMessage(successMsg, result.message, 0);
             setTimeout(() => {
-                window.location.href = "/CashFlow_Tela_HomePage/home.html";
+                window.location.href = "/home";
             }, 600);
         } else {
             showMessage(errorMsg, result.message || 'E-mail ou senha inválidos.');
@@ -181,7 +181,7 @@ async function finishGoogle(credential, consentimento = false) {
     if (rememberInput.checked) storage.set('cashflow-lembrar', '1');
     else storage.remove('cashflow-lembrar');
     showMessage(successMsg, data.message, 0);
-    setTimeout(() => { window.location.href = data.proxima || '/CashFlow_Tela_HomePage/home.html'; }, 600);
+    setTimeout(() => { window.location.href = data.proxima || '/home'; }, 600);
 }
 
 CashFlowAuth.mountGoogleButton(document.getElementById('googleLogin'), {

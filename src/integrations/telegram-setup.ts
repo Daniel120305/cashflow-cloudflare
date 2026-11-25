@@ -28,9 +28,9 @@ export const BOT_NAME = "CashFlow - Assistente Financeiro";
 // "O que este bot faz?" (aparece antes de iniciar a conversa).
 export const BOT_DESCRIPTION =
   "Seu assistente financeiro do CashFlow 💰\n\n" +
-  "• Registre gastos e receitas mandando mensagem: \"despesa mercado 35,90\"\n" +
+  "• Registre gastos e receitas: /despesa mercado 35,90 ou /receita salário 3000\n" +
   "• Mande a foto do cupom fiscal e eu leio o valor\n" +
-  "• Consulte saldo, extrato, categorias e seu limite de gastos\n" +
+  "• Consulte /saldo, /extrato, /categorias e /limite\n" +
   "• Receba alertas quando chegar a 80% do limite\n\n" +
   "Para começar, vincule sua conta no Perfil do site.";
 // Bio do perfil do bot (até 120 caracteres).

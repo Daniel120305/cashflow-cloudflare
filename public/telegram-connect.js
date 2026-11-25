@@ -12,6 +12,8 @@
   const DISMISS_KEY = "cashflowTelegramDispensado";
   const PLANE =
     '<svg viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true"><path fill="currentColor" d="M21.94 4.3 18.7 19.6c-.24 1.07-.88 1.34-1.78.83l-4.93-3.63-2.38 2.29c-.26.26-.48.48-.99.48l.35-5.02 9.14-8.26c.4-.35-.09-.55-.62-.2L6.2 13.2l-4.86-1.52c-1.06-.33-1.08-1.06.22-1.57L20.55 2.8c.88-.32 1.65.21 1.39 1.5Z"/></svg>';
+  // Logo oficial do Telegram (círculo azul com o avião), em SVG: nítida em qualquer tamanho.
+  const LOGO = '<svg class="tg-logo-svg" viewBox="0 0 240 240" aria-hidden="true" focusable="false"><circle cx="120" cy="120" r="120" fill="#229ED9"/><path fill="#fff" d="M54.3 118.8c35-15.2 58.3-25.3 70-30.2 33.3-13.9 40.3-16.3 44.8-16.4 1 0 3.2.2 4.7 1.4 1.2 1 1.5 2.3 1.7 3.3.2 1 .4 3.1.2 4.7-1.8 19-9.6 65.1-13.6 86.3-1.7 9-5 12-8.2 12.3-7 .6-12.3-4.6-19-9-10.6-6.9-16.5-11.2-26.8-18-11.9-7.8-4.2-12.1 2.6-19.1 1.8-1.8 32.5-29.8 33.1-32.3.1-.3.1-1.5-.6-2.1-.7-.6-1.7-.4-2.5-.2-1.1.2-17.8 11.3-50.3 33.3-4.8 3.3-9.1 4.9-13 4.8-4.3-.1-12.5-2.4-18.7-4.4-7.5-2.4-13.5-3.7-13-7.9.3-2.2 3.3-4.4 8.9-6.7z"/></svg>';
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
   const css = `
@@ -20,7 +22,11 @@
   .tgc-close{position:absolute;top:10px;right:12px;width:36px;height:36px;border:0;border-radius:50%;background:transparent;color:#64748b;font-size:24px;cursor:pointer}
   .tgc-close:hover{background:#f1f5f9}
   .tgc-head{display:flex;gap:14px;align-items:center;margin-bottom:16px}
-  .tgc-logo{flex:none;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#2aabee,#229ed9);color:#fff;display:flex;align-items:center;justify-content:center;font-size:28px}
+  .tgc-logo{flex:none;width:52px;height:52px;display:block;line-height:0}
+  .tgc-logo .tg-logo-svg{width:100%;height:100%;display:block}
+  .tg-logo-svg{display:block}
+  .tg-logo-inline{display:inline-flex;align-items:center;gap:8px}
+  .tg-logo-inline .tg-logo-svg{width:1.15em;height:1.15em;flex:none}
   .tgc-head h2{margin:0;font-size:1.25rem;line-height:1.2}
   .tgc-head p{margin:4px 0 0;color:#64748b;font-size:.9rem}
   .tgc-benefits{list-style:none;margin:0 0 18px;padding:0;display:grid;gap:10px}
@@ -60,6 +66,7 @@
   .tgc-card-txt{flex:1;min-width:0}
   .tgc-card-txt b{display:block;font-size:1.05rem;margin-bottom:2px}
   .tgc-card-txt span{color:#475569;font-size:.92rem;line-height:1.4}
+  .tgc-card-txt code{background:#bae6fd;color:#075985;border-radius:6px;padding:1px 6px;font-size:.88em;white-space:nowrap}
   .tgc-card-act{display:flex;gap:8px;flex:none;align-items:center}
   .tgc-card-act .tgc-btn{width:auto;margin:0;min-height:44px;padding:8px 18px;white-space:nowrap}
   .tgc-card-act .tgc-btn.link{margin:0;padding:8px 10px}
@@ -84,6 +91,7 @@
   body.theme-dark .tgc-check{background:#14532d;color:#86efac}
   body.theme-dark .tgc-card{background:linear-gradient(135deg,#0c4a6e,#0f172a 70%);border-color:#075985;color:#e2e8f0}
   body.theme-dark .tgc-card-txt span{color:#cbd5e1}
+  body.theme-dark .tgc-card-txt code{background:#075985;color:#e0f2fe}
   body.theme-dark .tgc-chip{background:#334155;color:#cbd5e1}
   body.theme-dark .tgc-chip.on{background:#14532d;color:#86efac}
   body.theme-dark .tgc-chip.off{background:#0c4a6e;color:#bae6fd}
@@ -142,10 +150,10 @@
   function showIntro() {
     shell(
       `<ul class="tgc-benefits">
-        <li><span class="ico">✍️</span><div><b>Registre em segundos</b>Mande <code>despesa mercado 35,90</code> e pronto.</div></li>
+        <li><span class="ico">✍️</span><div><b>Registre em segundos</b><code>/despesa mercado 35,90</code> ou <code>/receita salário 3000</code></div></li>
         <li><span class="ico">📷</span><div><b>Foto do cupom fiscal</b>Eu leio o valor e você só confirma.</div></li>
         <li><span class="ico">🔔</span><div><b>Alertas de limite</b>Aviso quando você chegar a 80% do gasto máximo.</div></li>
-        <li><span class="ico">📊</span><div><b>Consultas rápidas</b>/saldo, /extrato, /categorias e mais.</div></li>
+        <li><span class="ico">📊</span><div><b>Consultas rápidas</b><code>/saldo</code>, <code>/mes</code>, <code>/extrato</code>, <code>/categorias</code> e <code>/limite</code></div></li>
       </ul>
       <label class="tgc-label" for="tgcUser">Seu nome de usuário no Telegram</label>
       <div class="tgc-input"><span>@</span><input id="tgcUser" type="text" placeholder="seuusuario" maxlength="33" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(state?.nome_telegram || "")}"></div>
@@ -242,7 +250,7 @@
       `<div class="tgc-ok">
         <div class="tgc-check">✓</div>
         <h3>${fresh ? "Telegram conectado!" : "Seu Telegram está conectado"}</h3>
-        <p>${state?.nome_telegram ? `Conta @${esc(state.nome_telegram)}. ` : ""}Agora é só mandar mensagens ao bot, como <code>despesa mercado 35,90</code>, ou a foto de um cupom fiscal.</p>
+        <p>${state?.nome_telegram ? `Conta @${esc(state.nome_telegram)}. ` : ""}Agora é só mandar <code>/despesa mercado 35,90</code>, <code>/saldo</code> ou a foto de um cupom fiscal. Toque em <b>Menu</b> no bot para ver todos os comandos.</p>
       </div>
       ${link ? `<a class="tgc-btn" href="${link}" target="_blank" rel="noopener">${PLANE} Abrir conversa com o bot</a>` : ""}
       <button class="tgc-btn sec" id="tgcRelink" type="button">Conectar outro Telegram</button>
@@ -280,7 +288,7 @@
     modal.className = "tgc-backdrop";
     modal.innerHTML = `<div class="tgc-modal" role="dialog" aria-modal="true" aria-labelledby="tgcTitle">
         <button class="tgc-close" type="button" aria-label="Fechar">&times;</button>
-        <div class="tgc-head"><div class="tgc-logo">${PLANE}</div><div><h2 id="tgcTitle">CashFlow no Telegram</h2><p>Controle suas finanças por mensagem.</p></div></div>
+        <div class="tgc-head"><div class="tgc-logo">${LOGO}</div><div><h2 id="tgcTitle">CashFlow no Telegram</h2><p>Controle suas finanças por mensagem.</p></div></div>
         <div class="tgc-body"><div class="tgc-wait"><span class="tgc-spin"></span> Carregando…</div></div>
       </div>`;
     modal.addEventListener("click", (ev) => ev.target === modal && close());
@@ -303,8 +311,8 @@
     }
     el.hidden = false;
     el.innerHTML = `<section class="tgc-card" aria-label="Conectar Telegram">
-        <div class="tgc-logo">${PLANE}</div>
-        <div class="tgc-card-txt"><b>Registre gastos pelo Telegram</b><span>Mande "despesa mercado 35,90" ou a foto do cupom e o CashFlow registra para você. Leva 1 minuto para conectar.</span></div>
+        <div class="tgc-logo">${LOGO}</div>
+        <div class="tgc-card-txt"><b>Registre gastos pelo Telegram</b><span>Mande <code>/despesa mercado 35,90</code> ou a foto do cupom fiscal e o CashFlow registra para você. Leva 1 minuto para conectar.</span></div>
         <div class="tgc-card-act">
           <button class="tgc-btn" type="button" data-tgc-open>${PLANE} Conectar</button>
           <button class="tgc-btn link" type="button" data-tgc-later>Agora não</button>
@@ -344,6 +352,6 @@
   window.CashFlowTelegram = { abrir: open, atualizar: refresh, estado: () => state };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bind);
   else bind();
-  // Link direto: ...home.html#telegram abre o assistente.
+  // Link direto: /home#telegram abre o assistente.
   if (location.hash === "#telegram") setTimeout(open, 400);
 })();

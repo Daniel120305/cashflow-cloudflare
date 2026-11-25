@@ -8,7 +8,9 @@ import { ensureWebhook, ensureProfile, webhookSecret, COMMANDS } from "../src/in
 
 const ORIGIN = "http://localhost:8787";
 const TOKEN = "123:TESTE";
-const env = { NODE_ENV: "development", EMAIL_TOKEN_SECRET: "x", APP_ORIGIN: ORIGIN, TELEGRAM_BOT_TOKEN: TOKEN, TELEGRAM_BOT_USERNAME: "cashflow_pi_bot" } as unknown as Env;
+const aiCalls: any[] = [];
+const fakeAi = { run: async (_m: string, input: any) => (aiCalls.push(input), { response: '{"estabelecimento":"Supermercado Bom Preço","data":"20/11/2026","total":"R$ 87,45"}' }) };
+const env = { NODE_ENV: "development", EMAIL_TOKEN_SECRET: "x", APP_ORIGIN: ORIGIN, TELEGRAM_BOT_TOKEN: TOKEN, TELEGRAM_BOT_USERNAME: "cashflow_pi_bot", AI: fakeAi } as unknown as Env;
 process.env.NODE_ENV = "development"; process.env.APP_ORIGIN = ORIGIN; process.env.EMAIL_TOKEN_SECRET = "x";
 const db = wrapPool(miniPool() as any);
 const stamp = Date.now();
@@ -19,6 +21,7 @@ const realFetch = globalThis.fetch;
 globalThis.fetch = (async function (this: any, url: any, init?: any) {
   if (this !== undefined && this !== globalThis) throw new TypeError("Illegal invocation");
   const u = String(url);
+  if (u.startsWith("https://api.telegram.org/file/")) return new Response(new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3]), { headers: { "content-length": "6" } });
   if (u.startsWith("https://api.telegram.org/")) {
     const method = u.split("/").pop();
     const body = init?.body instanceof FormData ? Object.fromEntries(init.body) : init?.body ? JSON.parse(init.body) : {};
@@ -26,6 +29,7 @@ globalThis.fetch = (async function (this: any, url: any, init?: any) {
     if (method === "getWebhookInfo") return Response.json({ ok: true, result: { url: "" } });
     if (method === "getMyDescription") return Response.json({ ok: true, result: { description: "" } });
     if (method === "getMyCommands") return Response.json({ ok: true, result: [] });
+    if (method === "getFile") return Response.json({ ok: true, result: { file_path: "photos/file_1.jpg" } });
     if (method === "getMyName") return Response.json({ ok: true, result: { name: "CashFlow" } });
     return Response.json({ ok: true, result: true });
   }
@@ -123,6 +127,18 @@ test("vincular pelo código, registrar despesa, /saldo e /extrato", async () => 
   const undoId = sent.find((s) => s.method === "sendMessage").body.reply_markup.inline_keyboard[0][0].callback_data;
   assert.match(await cbk(undoId), /Apagado/);
   assert.equal((await call("GET", "/api/transacoes")).data.transactions.length, 1);
+  // Foto do cupom: lê pela IA, pergunta e registra ao confirmar.
+  sent.length = 0;
+  await hook({ update_id: ++upd, message: { message_id: upd, chat: { id: 777, type: "private" }, from: { id: 777, username: "Amanda_Teste" }, photo: [{ file_id: "p1", file_size: 6 }] } });
+  const lido = sent.filter((x) => x.method === "sendMessage").map((x) => x.body.text).join("\n");
+  assert.match(lido, /Lendo o comprovante/);
+  assert.match(lido, /Supermercado Bom Preço/);
+  assert.match(lido, /R\$\s?87,45/);
+  assert.equal(typeof aiCalls.at(-1).image, "string"); // base64
+  const ok = sent.find((x) => x.body?.reply_markup?.inline_keyboard?.[0]?.[0]?.callback_data?.startsWith("confirmar:"));
+  assert.match(await cbk(ok.body.reply_markup.inline_keyboard[0][0].callback_data), /Despesa registrada/);
+  const depois = (await call("GET", "/api/transacoes")).data.transactions;
+  assert.ok(depois.some((t: any) => t.description === "Supermercado Bom Preço" && t.amount === 87.45 && t.date === "2026-11-20"));
   assert.match(await cbk("desvincular:sim"), /desvinculado/);
   // Desconectar pelo site também funciona (com RLS do usuário).
   await call("POST", "/api/telegram", { acao: "gerar", nome_telegram: "Amanda_Teste" });

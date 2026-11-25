@@ -12,6 +12,7 @@ import { workersAiOcr } from "./integrations/ocr.js";
 import { ensureWebhook, ensureProfile, webhookSecret } from "./integrations/telegram-setup.js";
 import { saveTransaction, monthlySummary } from "./services/finance.js";
 import { drainQueues, cleanup } from "./services/queues.js";
+import { redirectFor, assetFor, rewritePage } from "./pages.js";
 
 export interface Env {
   ASSETS: { fetch: (request: Request) => Promise<Response> };
@@ -100,9 +101,15 @@ export async function handleApi(request: Request, env: Env, ctx: Ctx, db: Databa
 export default {
   async fetch(request: Request, env: Env, ctx: Ctx): Promise<Response> {
     const url = new URL(request.url);
-    // Abrir o site vai direto para a tela de login.
-    if (url.pathname === "/" || url.pathname === "/index.html")
-      return Response.redirect(new URL("/CashFlow_Tela_de_Login/login.html", url).toString(), 302);
+    // Endereço antigo (com .html) ou raiz: redireciona para o endereço curto.
+    const moved = redirectFor(url);
+    if (moved) return Response.redirect(moved, 301);
+    // Endereço curto (/home, /perfil...): serve a página da pasta dela.
+    const file = assetFor(url.pathname);
+    if (file) {
+      const page = await env.ASSETS.fetch(new Request(new URL(file, url).toString(), request));
+      return rewritePage(page, file);
+    }
     if (!url.pathname.startsWith("/api/")) return env.ASSETS.fetch(request);
     loadEnv(env);
     let db: (Database & { end: () => Promise<void> }) | undefined;

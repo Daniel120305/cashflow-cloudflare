@@ -121,7 +121,7 @@ test("cadastro novo grava bcrypt pelo banco, confirma email e entra", async () =
   assert.equal(r.status, 200, JSON.stringify(r.data));
   const row = (await db.query("SELECT senha FROM usuarios WHERE email=$1", [newEmail])).rows[0];
   assert.match(row.senha, /^\$2a\$12\$/);
-  const link = logs.find((l) => l.includes("confirmar-email.html") && l.includes(newEmail));
+  const link = logs.find((l) => l.includes("/confirmar-email?") && l.includes(newEmail));
   assert.ok(link, "link de confirmação no terminal");
   const token = new URL(link!.split("\n").find((x) => x.includes("http"))!.trim()).searchParams.get("token");
   const conf = await api("POST", "/api/email/confirmar", { token });
@@ -134,7 +134,7 @@ test("recuperação de senha de ponta a ponta", async () => {
   const api = client();
   const r = await api("POST", "/api/senha/recuperar", { email: legacyEmail });
   assert.equal(r.status, 200);
-  const link = logs.find((l) => l.includes("redefinir-senha.html") && l.includes(legacyEmail));
+  const link = logs.find((l) => l.includes("/redefinir-senha?") && l.includes(legacyEmail));
   assert.ok(link);
   const token = new URL(link!.split("\n").find((x) => x.includes("http"))!.trim()).searchParams.get("token");
   const reset = await api("POST", "/api/senha/redefinir", { token, senha: "NovaSenha@789", confirmar_senha: "NovaSenha@789" });

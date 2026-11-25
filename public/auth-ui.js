@@ -152,7 +152,7 @@
         if (e.target === policyDialog) close();
       });
       try {
-        const html = await (await fetch("/privacidade.html")).text();
+        const html = await (await fetch("/privacidade")).text();
         const doc = new DOMParser().parseFromString(html, "text/html");
         const main = doc.querySelector("main");
         main.querySelector("h1")?.remove();
@@ -160,7 +160,7 @@
         policyDialog.querySelector(".policy-body").innerHTML = main.innerHTML;
       } catch {
         policyDialog.querySelector(".policy-body").innerHTML =
-          '<p>Não foi possível carregar o texto agora. <a href="/privacidade.html" target="_blank" rel="noopener">Abrir em outra página</a>.</p>';
+          '<p>Não foi possível carregar o texto agora. <a href="/privacidade" target="_blank" rel="noopener">Abrir em outra página</a>.</p>';
       }
     }
     const agree = policyDialog.querySelector(".policy-agree");
@@ -177,9 +177,9 @@
     policyDialog.querySelector(".policy-body").scrollTop = 0;
   }
 
-  // Links para /privacidade.html abrem a janela e mantêm o formulário preenchido.
+  // Links para /privacidade abrem a janela e mantêm o formulário preenchido.
   function interceptPolicyLinks(root = document) {
-    root.querySelectorAll('a[href="/privacidade.html"]').forEach((link) => {
+    root.querySelectorAll('a[href="/privacidade"]').forEach((link) => {
       if (link.dataset.policy) return;
       link.dataset.policy = "1";
       link.addEventListener("click", (event) => {

@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import type { Database } from "../db.js";
 import { userDatabase } from "../db.js";
-import { categoryLabel, extractReceipt, parseTransaction, brazilToday } from "./receipt.js";
+import { categoryLabel, parseTransaction, brazilToday } from "./receipt.js";
+import { readReceipt } from "./ocr.js";
 type Input = {
   description: string;
   amount: string;
@@ -53,8 +54,8 @@ export const HELP_TEXT = [
   "<b>💰 CashFlow — comandos</b>",
   "",
   "<b>Registrar</b>",
-  "• <code>despesa mercado 35,90</code> — registra uma despesa",
-  "• <code>receita salário 3000</code> — registra uma receita",
+  "• <code>/despesa mercado 35,90</code> — registra uma despesa",
+  "• <code>/receita salário 3000</code> — registra uma receita",
   "• 📷 Foto do cupom fiscal — leio e pergunto se confirmo",
   "• /desfazer — apaga o último lançamento",
   "",
@@ -170,13 +171,13 @@ export class TelegramService {
     const name = cmd?.[1]?.toLowerCase();
     if (!userId) {
       if (name === "ajuda" || name === "help") {
-        await this.html(chat, HELP_TEXT + "\n\n<i>Antes, vincule sua conta: no site, Perfil → Telegram → Gerar código.</i>", this.siteButton("Vincular no site", "/CashFlow_Tela_Perfil/perfil.html"));
+        await this.html(chat, HELP_TEXT + "\n\n<i>Antes, vincule sua conta: no site, Perfil → Telegram → Gerar código.</i>", this.siteButton("Vincular no site", "/perfil"));
         return;
       }
       await this.html(
         chat,
         "👋 <b>Olá! Eu sou o assistente do CashFlow.</b>\n\nPara usar, vincule sua conta:\n1. Entre no site e abra o <b>Perfil</b>\n2. Toque em <b>Telegram</b> e gere o código\n3. Toque em <b>Abrir no Telegram e vincular</b>",
-        this.siteButton("Abrir o CashFlow", "/CashFlow_Tela_Perfil/perfil.html"),
+        this.siteButton("Abrir o CashFlow", "/perfil"),
       );
       return;
     }
@@ -196,7 +197,7 @@ export class TelegramService {
     }
     await this.html(
       chat,
-      "Não entendi. 🤔\nExemplos: <code>despesa mercado 30,50</code> ou <code>receita salário 3000</code>.\nVeja tudo em /ajuda.",
+      "Não entendi. 🤔\nExemplos: <code>/despesa mercado 35,90</code> ou <code>/receita salário 3000</code>.\nToque em <b>Menu</b> ou mande /ajuda para ver tudo.",
       { reply_markup: MENU },
     );
   }
@@ -287,7 +288,7 @@ export class TelegramService {
           [userId, brazilToday()],
         );
         if (!r.rows.length) {
-          await this.html(chat, "Nenhum lançamento hoje. 🙂\nRegistre com <code>despesa café 6,50</code>.");
+          await this.html(chat, "Nenhum lançamento hoje. 🙂\nRegistre com <code>/despesa café 6,50</code>.");
           return true;
         }
         let gastos = 0, entradas = 0;
@@ -308,7 +309,7 @@ export class TelegramService {
           r.rows.length
             ? ["<b>🧾 Últimos lançamentos</b>", ...r.rows.map((x: any) => `${x.data} ${x.tipo === "income" ? "🟢" : "🔴"} ${esc(x.descricao)} · ${x.tipo === "income" ? "+" : "−"}${brl(x.valor)}`)].join("\n")
             : "Nenhum lançamento ainda.",
-          this.siteButton("Ver tudo no site", "/CashFlow_Tela_HomePage/home.html"),
+          this.siteButton("Ver tudo no site", "/home"),
         );
         return true;
       }
@@ -336,7 +337,7 @@ export class TelegramService {
       case "limite": {
         const s = await this.deps.summary(userId);
         if (!(s.gasto_maximo > 0)) {
-          await this.html(chat, "Você ainda não definiu um gasto máximo mensal. 🎯\nDefina no site e eu aviso quando chegar a 80% e a 100%.", this.siteButton("Definir gasto máximo", "/CashFlow_Tela_Perfil/perfil.html#gasto-maximo"));
+          await this.html(chat, "Você ainda não definiu um gasto máximo mensal. 🎯\nDefina no site e eu aviso quando chegar a 80% e a 100%.", this.siteButton("Definir gasto máximo", "/perfil#gasto-maximo"));
           return true;
         }
         const resta = s.gasto_maximo - s.despesas;
@@ -374,7 +375,7 @@ export class TelegramService {
         });
         return true;
       case "site":
-        await this.html(chat, "Abra o CashFlow pelo botão abaixo:", this.siteButton("🌐 Abrir o CashFlow", "/CashFlow_Tela_HomePage/home.html"));
+        await this.html(chat, "Abra o CashFlow pelo botão abaixo:", this.siteButton("🌐 Abrir o CashFlow", "/home"));
         return true;
       case "desvincular":
         await this.html(chat, "Desligar este Telegram da sua conta do CashFlow? Seus dados no site continuam.", {
@@ -418,7 +419,7 @@ export class TelegramService {
         "DELETE FROM ocr_pendencias WHERE id=$1 AND usuario_id=$2 AND telegram_id=$3 AND confirmado_em IS NULL",
         [m[2], userId, chat],
       );
-      await this.send(chat, "Comprovante cancelado.");
+      await this.send(chat, "Ok, comprovante descartado. Nada foi registrado.");
       return;
     }
     const r = await userDatabase(this.deps.db, userId).query(
@@ -445,11 +446,16 @@ export class TelegramService {
       "UPDATE ocr_pendencias SET confirmado_em=NOW() WHERE id=$1 AND usuario_id=$2 AND telegram_id=$3 AND confirmado_em IS NULL RETURNING id",
       [p.id, userId, chat],
     );
-    await this.send(chat, "Despesa confirmada.");
+    await this.html(chat, `✅ Despesa registrada: <b>${esc(p.descricao)}</b> · ${brl(p.valor)}`, {
+      reply_markup: { inline_keyboard: [[{ text: "↩️ Desfazer", callback_data: "cmd:desfazer" }, { text: "💰 Saldo", callback_data: "cmd:saldo" }]] },
+    });
   }
   private async photo(chat: number, userId: number, photo: any) {
     const deadline = Date.now() + 25000;
     let image: Uint8Array | undefined;
+    // Aviso imediato: a leitura pela IA leva alguns segundos.
+    await this.send(chat, "🔍 Lendo o comprovante, só um instante…").catch(() => {});
+    await this.api("sendChatAction", { chat_id: chat, action: "typing" }).catch(() => {});
     try {
       if (photo.file_size > 10 * 1024 * 1024)
         throw new Error("Imagem muito grande.");
@@ -497,11 +503,11 @@ export class TelegramService {
       );
       image.fill(0);
       image = undefined;
-      const receipt = extractReceipt(text);
+      const receipt = readReceipt(text);
       if (!receipt) {
         await this.send(
           chat,
-          "Não identifiquei valor, data e estabelecimento. Envie outra foto ou registre despesa descrição valor.",
+          "Não consegui identificar o valor nessa foto. 😕\nTente outra foto, com o cupom inteiro, reto e bem iluminado, ou registre com /despesa descrição valor (ex.: /despesa mercado 35,90).",
         );
         return;
       }
@@ -517,24 +523,25 @@ export class TelegramService {
         ],
       );
       const id = r.rows[0].id;
-      await this.send(
+      await this.html(
         chat,
-        `Confirmar despesa?\n${receipt.description}\nR$ ${receipt.amount} • ${receipt.date}\nCategoria: ${categoryLabel(receipt.category)}`,
+        `🧾 <b>Li este comprovante:</b>\n\n🏪 ${esc(receipt.description)}\n💸 <b>${brl(receipt.amount)}</b>\n📅 ${receipt.date.split("-").reverse().join("/")}\n🏷 ${esc(categoryLabel(receipt.category))}\n\nRegistrar como despesa?`,
         {
           reply_markup: {
             inline_keyboard: [
               [
-                { text: "Confirmar", callback_data: `confirmar:${id}` },
-                { text: "Cancelar", callback_data: `cancelar:${id}` },
+                { text: "✅ Registrar", callback_data: `confirmar:${id}` },
+                { text: "✖️ Cancelar", callback_data: `cancelar:${id}` },
               ],
             ],
           },
         },
       );
-    } catch {
+    } catch (error) {
+      console.error("Telegram: falha ao ler comprovante", String((error as Error)?.message ?? error));
       await this.send(
         chat,
-        "Não foi possível ler o comprovante. Tente outra foto ou registre despesa descrição valor.",
+        "Não consegui ler o comprovante agora. 😕\nTente de novo em instantes ou registre com /despesa descrição valor (ex.: /despesa mercado 35,90).",
       );
     } finally {
       image?.fill(0);

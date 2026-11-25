@@ -12,9 +12,34 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    // Mantém os endereços .html como no Render (sem redirecionar para /login).
+    // Endereços curtos (/home, /perfil...) e os antigos com .html passam pelo
+    // Worker (src/pages.ts): o antigo redireciona para o curto.
     "html_handling": "none",
-    "run_worker_first": ["/api/*", "/", "/index.html"]
+    "run_worker_first": [
+      "/api/*", "/", "/index.html",
+      "/login",
+      "/cadastro",
+      "/cadastro/endereco",
+      "/cadastro/finalizacao",
+      "/home",
+      "/perfil",
+      "/configuracoes",
+      "/recuperar-senha",
+      "/redefinir-senha",
+      "/confirmar-email",
+      "/privacidade",
+      "/CashFlow_Tela_de_Login/login.html",
+      "/CashFlow_Tela_de_Cadastro/dadospessoais.html",
+      "/CashFlow_Tela_de_Cadastro/endereco.html",
+      "/CashFlow_Tela_de_Cadastro/finalizacao.html",
+      "/CashFlow_Tela_HomePage/home.html",
+      "/CashFlow_Tela_Perfil/perfil.html",
+      "/CashFlow_Tela_Config/config.html",
+      "/recuperar-senha.html",
+      "/redefinir-senha.html",
+      "/confirmar-email.html",
+      "/privacidade.html"
+    ]
   },
   // Conexão com o Supabase (Hyperdrive "cashflow-db", cache desligado).
   "hyperdrive": [

@@ -1864,7 +1864,7 @@ async function loadUserName() {
             const userNameElement = document.getElementById("userName");
             if (userNameElement) {
                 userNameElement.textContent = result.dados?.nome || result.nome || "Usuário";
-                userNameElement.href = "../CashFlow_Tela_Perfil/perfil.html";
+                userNameElement.href = "/perfil";
             }
             return;
         }
@@ -2570,7 +2570,7 @@ setInterval(async()=>{if(document.visibilityState!=="visible"||!window.financeMa
                         <span>Comece registrando um gasto ou uma receita. Endereço e dados financeiros são opcionais e ficam no seu perfil.</span>
                     </div>
                     <div class="conta-aviso-acoes">
-                        <a class="conta-aviso-btn" href="../CashFlow_Tela_Perfil/perfil.html">Completar perfil</a>
+                        <a class="conta-aviso-btn" href="/perfil">Completar perfil</a>
                         <button type="button" class="conta-aviso-fechar" data-fechar aria-label="Fechar aviso de boas-vindas">Agora não</button>
                     </div>
                 </div>`);
