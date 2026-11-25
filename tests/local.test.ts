@@ -157,22 +157,31 @@ test("segurança: origem de outro site, sem sessão e limite de tentativas", asy
   assert.equal(last, 429);
 });
 
-test("OCR pelo Workers AI aceita a licença na primeira vez", async () => {
-  const calls: any[] = [];
+test("OCR: aceita a licença (5016) e contorna formato recusado (3030), como no ar", async () => {
+  const calls: { model: string; input: any }[] = [];
   let agreed = false;
   const ai = {
-    run: async (_m: string, input: any) => {
-      calls.push(input);
-      if (input.prompt === "agree") return (agreed = true), { response: "ok" };
+    run: async (model: string, input: any) => {
+      calls.push({ model, input });
+      // Llama 4: recusa o formato (erro real visto no ar).
+      if (model.includes("llama-4")) throw new Error("3030: Unable to add image when there are no user-supplied nor system-supplied messages.");
+      // O aceite da licença também volta como "erro" 5016.
+      if (input.prompt === "agree") { agreed = true; throw new Error("5016: Thank you for agreeing to this model's terms. You may now use the model."); }
       if (!agreed) throw new Error("5016: Prior to using this model, you must submit the prompt 'agree'");
-      return { response: "SUPERMERCADO BOM PRECO\n10/11/2026\nTOTAL R$ 45,90" };
+      return { response: '{"estabelecimento":"Shopping Bom","data":"25/11/2026","total":"R$ 2.100,00"}' };
     },
   };
-  const text = await workersAiOcr(ai)!(new Uint8Array([1, 2, 3]));
-  assert.match(text, /TOTAL/);
-  assert.equal(calls.length, 3);
-  const { extractReceipt } = await import("../src/integrations/receipt.js");
-  assert.deepEqual(extractReceipt(text), { description: "SUPERMERCADO BOM PRECO", amount: "45.90", date: "2026-11-10", category: "alimentacao" });
+  const text = await workersAiOcr(ai)!(new Uint8Array([0xff, 0xd8, 1, 2, 3]));
+  const { readReceipt } = await import("../src/integrations/ocr.js");
+  assert.deepEqual(readReceipt(text, "2026-11-25"), { description: "Shopping Bom", amount: "2100.00", date: "2026-11-25", category: "outros-despesas" });
+  assert.ok(calls.some((c) => c.input.prompt === "agree"));
+  const ok = calls.at(-1)!;
+  assert.match(ok.input.messages[0].content[1].image_url.url, /^data:image\/jpeg;base64,/);
+});
+
+test("OCR: quando nenhum modelo lê, o erro diz por quê", async () => {
+  const ai = { run: async () => { throw new Error("3010: Invalid input"); } };
+  await assert.rejects(workersAiOcr(ai)!(new Uint8Array([1])), /llama4-image_url: 3010.*llama32-messages-bytes: 3010/);
 });
 
 test("verificação de email por DNS-over-HTTPS e login Google por WebCrypto", async () => {

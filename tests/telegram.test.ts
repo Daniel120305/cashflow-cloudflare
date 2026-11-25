@@ -134,7 +134,7 @@ test("vincular pelo código, registrar despesa, /saldo e /extrato", async () => 
   assert.match(lido, /Lendo o comprovante/);
   assert.match(lido, /Supermercado Bom Preço/);
   assert.match(lido, /R\$\s?87,45/);
-  assert.equal(typeof aiCalls.at(-1).image, "string"); // base64
+  assert.match(aiCalls.at(-1).messages[0].content[1].image_url.url, /^data:image\/jpeg;base64,/);
   const ok = sent.find((x) => x.body?.reply_markup?.inline_keyboard?.[0]?.[0]?.callback_data?.startsWith("confirmar:"));
   assert.match(await cbk(ok.body.reply_markup.inline_keyboard[0][0].callback_data), /Despesa registrada/);
   const depois = (await call("GET", "/api/transacoes")).data.transactions;

@@ -49,37 +49,77 @@ export function readReceipt(text: string, today = brazilToday()): Receipt | null
   return extractReceipt(text);
 }
 
-export function workersAiOcr(ai: Ai | undefined) {
+// Formas de pedir a leitura, da preferida para a reserva. Os modelos de visão
+// do Workers AI aceitam formatos diferentes de imagem; a primeira que devolver
+// texto vence. (Llama 3.2 Vision exige aceitar a licença da Meta uma vez.)
+const LLAMA4 = "@cf/meta/llama-4-scout-17b-16e-instruct";
+type Attempt = { name: string; model: string; input: (b64: string, bytes: Uint8Array) => any };
+const dataUrl = (b64: string) => `data:image/jpeg;base64,${b64}`;
+const withImage = (b64: string) => [
+  {
+    role: "user",
+    content: [
+      { type: "text", text: PROMPT },
+      { type: "image_url", image_url: { url: dataUrl(b64) } },
+    ],
+  },
+];
+export const ATTEMPTS: Attempt[] = [
+  { name: "llama4-image_url", model: LLAMA4, input: (b64) => ({ messages: withImage(b64), max_tokens: 300, temperature: 0 }) },
+  { name: "llama32-image_url", model: MODEL, input: (b64) => ({ messages: withImage(b64), max_tokens: 300, temperature: 0 }) },
+  { name: "llama32-prompt", model: MODEL, input: (b64) => ({ prompt: PROMPT, image: b64, max_tokens: 300, temperature: 0 }) },
+  {
+    name: "llama32-messages-bytes",
+    model: MODEL,
+    input: (_b64, bytes) => ({
+      messages: [
+        { role: "system", content: "Você lê comprovantes fiscais brasileiros e responde só em JSON." },
+        { role: "user", content: PROMPT },
+      ],
+      image: Array.from(bytes),
+      max_tokens: 300,
+      temperature: 0,
+    }),
+  },
+];
+
+const textOf = (result: any) => {
+  if (typeof result === "string") return result;
+  const r = result?.response ?? result?.result?.response ?? result?.choices?.[0]?.message?.content;
+  return typeof r === "string" ? r : r ? JSON.stringify(r) : "";
+};
+const isLicense = (e: unknown) => /5016|agree|licen/i.test(String((e as Error)?.message ?? e));
+
+export function workersAiOcr(ai: Ai | undefined, attempts: Attempt[] = ATTEMPTS) {
   if (!ai) return undefined;
   return async (image: Uint8Array) => {
-    const ask = (img: string | number[]) =>
-      ai.run(MODEL, {
-        messages: [{ role: "user", content: PROMPT }],
-        image: img,
-        max_tokens: 300,
-        temperature: 0,
-      });
-    const run = async () => {
-      try {
-        // Base64 é rápido de montar (pouca CPU no plano gratuito).
-        return await ask(toBase64(image));
-      } catch (error) {
-        if (/agree|licen/i.test(String((error as Error)?.message ?? error))) throw error;
-        // Alguns modelos só aceitam a imagem como lista de bytes.
-        return await ask(Array.from(image));
+    const b64 = toBase64(image);
+    const errors: string[] = [];
+    const agreed = new Set<string>();
+    for (const attempt of attempts) {
+      for (let tries = 0; tries < 2; tries++) {
+        try {
+          const text = textOf(await ai.run(attempt.model, attempt.input(b64, image)));
+          if (text.trim()) {
+            console.log("[CashFlow] Comprovante lido via", attempt.name, errors.length ? `(antes: ${errors.join(" | ")})` : "");
+            return text;
+          }
+          errors.push(`${attempt.name}: resposta vazia`);
+          break;
+        } catch (error) {
+          // Licença do modelo: aceita uma vez e tenta de novo. A Cloudflare
+          // responde o aceite com um "erro" 5016 ("Thank you for agreeing"),
+          // que não é falha.
+          if (isLicense(error) && !agreed.has(attempt.model)) {
+            agreed.add(attempt.model);
+            await ai.run(attempt.model, { prompt: "agree" }).catch(() => {});
+            continue;
+          }
+          errors.push(`${attempt.name}: ${String((error as Error)?.message ?? error).slice(0, 160)}`);
+          break;
+        }
       }
-    };
-    let result: any;
-    try {
-      result = await run();
-    } catch (error) {
-      // Na primeira vez a conta precisa aceitar a licença do modelo da Meta.
-      if (!/agree|licen/i.test(String((error as Error)?.message ?? error))) throw error;
-      await ai.run(MODEL, { prompt: "agree" });
-      result = await run();
     }
-    const text = typeof result === "string" ? result : (result?.response ?? "");
-    if (!text) throw new Error("O modelo não devolveu texto.");
-    return String(text);
+    throw new Error("Nenhum modelo leu a imagem. " + errors.join(" | "));
   };
 }
