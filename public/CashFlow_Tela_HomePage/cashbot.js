@@ -79,6 +79,10 @@
     // ---------- Respostas com os dados da conta ----------
     // Cada resposta: { texto, itens?, acoes?, sugestoes? }
     const R = (texto, extra = {}) => ({ texto, ...extra });
+    // Logo do Telegram (branca no botão azul).
+    const ICONES = {
+        telegram: '<svg class="tg-logo-svg" viewBox="0 0 240 240" aria-hidden="true" focusable="false"><circle cx="120" cy="120" r="120" fill="#fff"/><path fill="#229ED9" d="M54.3 118.8c35-15.2 58.3-25.3 70-30.2 33.3-13.9 40.3-16.3 44.8-16.4 1 0 3.2.2 4.7 1.4 1.2 1 1.5 2.3 1.7 3.3.2 1 .4 3.1.2 4.7-1.8 19-9.6 65.1-13.6 86.3-1.7 9-5 12-8.2 12.3-7 .6-12.3-4.6-19-9-10.6-6.9-16.5-11.2-26.8-18-11.9-7.8-4.2-12.1 2.6-19.1 1.8-1.8 32.5-29.8 33.1-32.3.1-.3.1-1.5-.6-2.1-.7-.6-1.7-.4-2.5-.2-1.1.2-17.8 11.3-50.3 33.3-4.8 3.3-9.1 4.9-13 4.8-4.3-.1-12.5-2.4-18.7-4.4-7.5-2.4-13.5-3.7-13-7.9.3-2.2 3.3-4.4 8.9-6.7z"/></svg>',
+    };
 
     function semDados(p) {
         return R(`Você ainda não tem transações ${textoPeriodo(p)}.`, {
@@ -304,8 +308,8 @@
         { keys: ["telegram", "bot do telegram", "vincular", "cupom", "nota fiscal"], r: () => {
             const conectado = window.CashFlowTelegram?.estado()?.vinculado;
             return R(conectado
-                ? "📲 Seu Telegram já está conectado ao CashFlow! Fale com o bot @CashFlowPIBot:"
-                : "📲 Com o bot do CashFlow no Telegram você controla suas finanças por mensagem. Veja o que dá para fazer:", {
+                ? "Seu Telegram já está conectado ao CashFlow! Fale com o bot @CashFlowPIBot:"
+                : "Com o bot do CashFlow no Telegram você controla suas finanças por mensagem. Veja o que dá para fazer:", {
                 itens: [
                     ["/despesa mercado 35,90", "registra uma despesa"],
                     ["/receita salário 3000", "registra uma receita"],
@@ -316,7 +320,7 @@
                     ["🔔 alertas automáticos", "aviso ao chegar a 80% e 100% do gasto máximo"],
                 ],
                 lista: "comandos",
-                acoes: [{ label: conectado ? "📲 Gerenciar Telegram" : "📲 Conectar Telegram (1 minuto)", acao: "telegram" }],
+                acoes: [{ label: conectado ? "Gerenciar Telegram" : "Conectar Telegram (1 minuto)", acao: "telegram", icone: "telegram" }],
                 sugestoes: ["Quanto ainda posso gastar?", "Resumo do mês"],
             });
         } },
@@ -471,6 +475,11 @@
                 btn.type = "button";
                 btn.className = "cashbot-acao";
                 btn.textContent = a.label;
+                // Ícone em SVG (ex.: logo do Telegram) antes do texto.
+                if (a.icone && ICONES[a.icone]) {
+                    btn.classList.add("cashbot-acao-ico");
+                    btn.insertAdjacentHTML("afterbegin", ICONES[a.icone]);
+                }
                 btn.addEventListener("click", () => executar(a));
                 box.appendChild(btn);
             });

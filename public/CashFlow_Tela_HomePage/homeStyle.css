@@ -3452,3 +3452,7 @@ body.theme-dark .quick-category .category-delete:hover { background: rgba(220, 3
 body.theme-dark .cashbot-cmds li { background: rgba(56, 189, 248, 0.1); }
 body.theme-dark .cashbot-cmds code { color: #7dd3fc; background: rgba(56, 189, 248, 0.16); }
 body.theme-dark .cashbot-cmds span { color: #cbd5e1; }
+
+/* CashBot: botão com ícone em SVG (logo do Telegram) */
+.cashbot-acao.cashbot-acao-ico { display: inline-flex; align-items: center; gap: 8px; }
+.cashbot-acao-ico .tg-logo-svg { width: 1.2em; height: 1.2em; flex: none; display: block; }
