@@ -27,6 +27,12 @@
   "ai": { "binding": "AI" },
   // Filas do Telegram e alertas a cada 5 min; limpeza de hora em hora.
   "triggers": { "crons": ["*/5 * * * *"] },
-  "vars": { "NODE_ENV": "production" },
+  // Valores públicos. Chaves secretas (BREVO_API_KEY, MAIL_FROM, EMAIL_TOKEN_SECRET,
+  // TELEGRAM_*) ficam em Settings → Variables and Secrets, como "Secret".
+  "vars": {
+    "NODE_ENV": "production",
+    "APP_ORIGIN": "https://cashflow.danielboucas.workers.dev",
+    "GOOGLE_CLIENT_ID": "151840248473-tnnstieeiun7tpjcahpbs1qbnl6tnse4.apps.googleusercontent.com"
+  },
   "observability": { "enabled": true }
 }
