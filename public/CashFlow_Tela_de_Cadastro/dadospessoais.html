@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#183350">
+    <title>Crie sua conta grátis — CashFlow</title>
+    <link rel="stylesheet" href="endereco.css">
+<link rel="stylesheet" href="/accessibility.css">
+<link rel="stylesheet" href="/auth.css">
+<link rel="stylesheet" href="/mobile.css">
+<link rel="stylesheet" href="signup.css">
+<script src="/mobile.js"></script>
+<script src="/auth-ui.js"></script>
+<script src="/requirements.js" defer></script>
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+</head>
+<body class="signup-page">
+    <div class="container">
+        <div class="header">
+            <h1>Crie sua conta grátis</h1>
+            <p>Leva menos de 1 minuto. Endereço e dados financeiros são opcionais e podem ser preenchidos depois, no seu perfil.</p>
+        </div>
+
+        <div class="form-container">
+            <div class="signup-session" id="sessaoAtiva" hidden>
+                <p>Você já está conectado como <strong id="sessaoNome"></strong>.</p>
+                <a class="btn-secondary signup-session-btn" href="/CashFlow_Tela_HomePage/home.html">Ir para o CashFlow</a>
+            </div>
+
+            <div class="google-signup">
+                <div class="google-slot" id="googleSignup"></div>
+                <p class="google-signup-hint">Com o Google é um clique: sem senha para lembrar e o email já vem confirmado.</p>
+            </div>
+            <div class="auth-divider">ou crie com seu email</div>
+
+            <div class="form-alert" id="cadastroAlerta" role="alert"></div>
+
+            <form novalidate>
+                <div class="form-group">
+                    <label for="nome">Nome completo</label>
+                    <input type="text" id="nome" placeholder="Ex.: Ana Souza" maxlength="120" autocomplete="name" autocapitalize="words">
+                </div>
+
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" placeholder="seu@email.com" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" aria-describedby="emailDica">
+                    <p class="email-suggestion" id="emailDica" aria-live="polite" hidden></p>
+                </div>
+
+                <div class="form-group form-group-spaced">
+                    <label for="senha">Senha</label>
+                    <input type="password" id="senha" placeholder="Crie uma senha forte" autocomplete="new-password">
+                </div>
+
+                <div class="checkbox-container">
+                    <input type="checkbox" id="termos2">
+                    <label for="termos2">Li e concordo com os <a href="/privacidade.html">Termos de Uso e a Política de Privacidade</a> do CashFlow.</label>
+                </div>
+
+                <p class="form-hint">🔒 Seus dados são protegidos conforme a Lei Geral de Proteção de Dados (LGPD). Vamos enviar um link para confirmar seu email.</p>
+
+                <div class="cadastroEtapa1">
+                    <button type="submit" class="btn-primary">Criar minha conta</button>
+                </div>
+
+                <div class="login-link">
+                    <span>Já tem conta? <a href="../CashFlow_Tela_de_Login/login.html">Entrar</a></span>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="dadospessoaisjs.js"></script>
+</body>
+</html>

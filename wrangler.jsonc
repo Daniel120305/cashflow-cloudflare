@@ -1,0 +1,32 @@
+// Configuração do CashFlow na Cloudflare (Workers).
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cashflow",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-11-01",
+  // nodejs_compat: o driver pg e o node:crypto funcionam no Worker.
+  "compatibility_flags": ["nodejs_compat"],
+  // Roda o Worker perto do Supabase (São Paulo, AWS sa-east-1).
+  "placement": { "region": "aws:sa-east-1" },
+  // Páginas, CSS e JS saem direto da rede da Cloudflare; só /api passa pelo Worker.
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    // Mantém os endereços .html como no Render (sem redirecionar para /login).
+    "html_handling": "none",
+    "run_worker_first": ["/api/*", "/", "/index.html"]
+  },
+  // Conexão com o Supabase. Troque o id pelo do Hyperdrive criado no painel.
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "COLOQUE_AQUI_O_ID_DO_HYPERDRIVE"
+    }
+  ],
+  // Leitura de comprovantes do Telegram (OCR).
+  "ai": { "binding": "AI" },
+  // Filas do Telegram e alertas a cada 5 min; limpeza de hora em hora.
+  "triggers": { "crons": ["*/5 * * * *"] },
+  "vars": { "NODE_ENV": "production" },
+  "observability": { "enabled": true }
+}
