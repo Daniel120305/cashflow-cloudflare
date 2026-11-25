@@ -32,7 +32,8 @@
   "vars": {
     "NODE_ENV": "production",
     "APP_ORIGIN": "https://app.cashflow-pi.workers.dev",
-    "GOOGLE_CLIENT_ID": "151840248473-tnnstieeiun7tpjcahpbs1qbnl6tnse4.apps.googleusercontent.com"
+    "GOOGLE_CLIENT_ID": "151840248473-tnnstieeiun7tpjcahpbs1qbnl6tnse4.apps.googleusercontent.com",
+    "TELEGRAM_BOT_USERNAME": "CashFlowPIBot"
   },
   "observability": { "enabled": true }
 }
