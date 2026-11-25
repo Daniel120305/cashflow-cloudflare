@@ -82,7 +82,7 @@ export async function buildApp(
             ? 503
             : (err.statusCode ?? 500);
     if (status >= 500 || ["23514", "23502", "22001"].includes(err.code))
-      req.log.error(err);
+      req.log.error(`${req.method} ${req.path} -> ${status}: ${err?.message ?? err}`, err?.stack ?? "");
     reply.code(status).send({
       status: "error",
       message:
