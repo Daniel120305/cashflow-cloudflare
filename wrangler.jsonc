@@ -16,11 +16,11 @@
     "html_handling": "none",
     "run_worker_first": ["/api/*", "/", "/index.html"]
   },
-  // Conexão com o Supabase. Troque o id pelo do Hyperdrive criado no painel.
+  // Conexão com o Supabase (Hyperdrive "cashflow-db", cache desligado).
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
-      "id": "COLOQUE_AQUI_O_ID_DO_HYPERDRIVE"
+      "id": "9ded02bb260b424fbae0f49e6f5717b9"
     }
   ],
   // Leitura de comprovantes do Telegram (OCR).
