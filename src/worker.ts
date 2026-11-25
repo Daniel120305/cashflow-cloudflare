@@ -9,6 +9,7 @@ import { checkEmailDomain } from "./integrations/email-check.js";
 import { googleVerifier } from "./integrations/google.js";
 import { TelegramService } from "./integrations/telegram.js";
 import { workersAiOcr } from "./integrations/ocr.js";
+import { ensureWebhook, webhookSecret } from "./integrations/telegram-setup.js";
 import { saveTransaction, monthlySummary } from "./services/finance.js";
 import { drainQueues, cleanup } from "./services/queues.js";
 
@@ -24,6 +25,7 @@ export interface Env {
   EMAIL_TOKEN_SECRET?: string;
   TELEGRAM_BOT_TOKEN?: string;
   TELEGRAM_WEBHOOK_SECRET?: string;
+  TELEGRAM_BOT_USERNAME?: string;
   NODE_ENV?: string;
 }
 type Ctx = { waitUntil: (p: Promise<unknown>) => void };
@@ -35,8 +37,16 @@ function loadEnv(env: Env) {
   target.NODE_ENV ||= "production";
 }
 
+// Só o token é obrigatório: o segredo do webhook sai dele se não for definido.
+const tgSecret = (env: Env) =>
+  env.TELEGRAM_BOT_TOKEN ? webhookSecret(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_WEBHOOK_SECRET) : undefined;
+const syncWebhook = (env: Env, force = false) =>
+  env.TELEGRAM_BOT_TOKEN && env.APP_ORIGIN
+    ? ensureWebhook(env.TELEGRAM_BOT_TOKEN, env.APP_ORIGIN, tgSecret(env)!, fetch, force)
+    : Promise.resolve("sem token");
+
 const telegramFor = (db: Database, env: Env) =>
-  env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_WEBHOOK_SECRET
+  env.TELEGRAM_BOT_TOKEN
     ? new TelegramService({
         db,
         token: env.TELEGRAM_BOT_TOKEN,
@@ -60,11 +70,14 @@ export async function handleApi(request: Request, env: Env, ctx: Ctx, db: Databa
     sendReset: resetSender(),
     sendConfirmation: confirmSender(),
     checkEmail: checkEmailDomain,
-    telegramSecret: env.TELEGRAM_WEBHOOK_SECRET,
+    telegramSecret: tgSecret(env),
+    telegramBot: env.TELEGRAM_BOT_USERNAME || undefined,
     later,
     onTelegramUpdate: () => later(drainQueues(db, telegramFor(db, env), 3)),
   });
   const response = await app.handle(request);
+  // Confere o webhook do bot de vez em quando (no máx. a cada 10 min por instância).
+  later(syncWebhook(env));
   return { response, background };
 }
 
@@ -99,6 +112,7 @@ export default {
     const db = connectDatabase(env.HYPERDRIVE.connectionString);
     const run = async () => {
       try {
+        await syncWebhook(env, true).catch((e) => console.error("Webhook do Telegram:", String(e)));
         await drainQueues(db, telegramFor(db, env));
         // Limpeza uma vez por hora: poupa a cota diária de consultas do Hyperdrive.
         if (new Date(controller.scheduledTime).getUTCMinutes() < 5) await cleanup(db);

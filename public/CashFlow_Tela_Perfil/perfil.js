@@ -271,6 +271,12 @@ function setupTelegram() {
     const inputNome = document.getElementById("inputTelegram");
     const statusMsg = document.getElementById("statusMsg");
     const badge = document.getElementById("tgBadge");
+    const abrirBot = document.getElementById("abrirBot");
+    // Username do bot vem do servidor; com ele, o botão abre o bot já com o código.
+    let botUsername = null;
+    fetch("/api/config/publica").then((r) => r.json()).then((d) => {
+        botUsername = d.telegramBot || null;
+    }).catch(() => {});
 
     if (!btnTelegram || !modal) return;
 
@@ -294,6 +300,10 @@ function setupTelegram() {
     // O código só é mostrado no momento em que é gerado (por segurança o servidor guarda só o hash).
     function mostrarCodigo(codigo, expiraEm) {
         codigoEl.textContent = `/vincular ${codigo}`;
+        if (abrirBot && botUsername) {
+            abrirBot.href = `https://t.me/${encodeURIComponent(botUsername)}?start=${encodeURIComponent(codigo)}`;
+            abrirBot.hidden = false;
+        }
         validadeEl.textContent = expiraEm ? `Válido até ${hora(expiraEm)}. Depois disso, gere outro.` : "";
         codigoBox.hidden = false;
         gerarBtn.textContent = "Gerar novo código";

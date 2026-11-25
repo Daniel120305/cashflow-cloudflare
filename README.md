@@ -77,15 +77,12 @@ A cada commit na `main`, a Cloudflare publica sozinha, como acontecia no Render.
 |---|---|---|
 | `EMAIL_TOKEN_SECRET` | Secret | um texto aleatório longo (assina os links de confirmação de email) |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Secret | os mesmos valores do Render |
-| `TELEGRAM_BOT_TOKEN` | Secret | se usar o bot (o mesmo do Render) |
-| `TELEGRAM_WEBHOOK_SECRET` | Secret | se usar o bot (o mesmo do Render) |
+| `TELEGRAM_BOT_TOKEN` | Secret | token do bot dado pelo @BotFather |
 
 Na troca de endereço, ajuste também:
 
 - **Google:** adicione o endereço novo em *Authorized JavaScript origins* no Google Cloud Console.
-- **Telegram:** aponte o webhook para o endereço novo abrindo no navegador
-  `https://api.telegram.org/bot<TOKEN>/setWebhook?url=<APP_ORIGIN>/api/telegram/webhook&secret_token=<TELEGRAM_WEBHOOK_SECRET>`.
-  A partir daí, as mensagens deixam de ir para o Render.
+- **Telegram:** o Worker aponta o webhook do bot para `<APP_ORIGIN>/api/telegram/webhook` sozinho, em até 5 minutos, e cadastra os comandos. O segredo do webhook é derivado do token, a menos que `TELEGRAM_WEBHOOK_SECRET` seja definido. O username do bot fica em `TELEGRAM_BOT_USERNAME`, no `wrangler.jsonc`, e mostra o botão "Abrir no Telegram" no perfil.
 
 ## Limites do plano gratuito (por dia)
 

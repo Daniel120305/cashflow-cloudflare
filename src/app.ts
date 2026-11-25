@@ -61,6 +61,8 @@ export async function buildApp(
     extraOrigins?: string[];
     // Login com Google: Client ID Web público e verificador do ID token.
     googleClientId?: string;
+    // Username público do bot do Telegram (para o botão "Abrir no Telegram").
+    telegramBot?: string;
     verifyGoogle?: GoogleVerifier;
     // Verificação de email: domínio real (DNS) e link de confirmação.
     checkEmail?: EmailCheck;
@@ -333,7 +335,7 @@ export async function buildApp(
     },
   );
   app.get("/api/config/publica", async () =>
-    success({ googleClientId: options.googleClientId ?? null }),
+    success({ googleClientId: options.googleClientId ?? null, telegramBot: options.telegramBot ?? null }),
   );
   app.post(
     "/api/login/google",

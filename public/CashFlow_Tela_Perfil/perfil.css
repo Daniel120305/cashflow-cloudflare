@@ -882,6 +882,9 @@ body.theme-dark .profile-form .limit-field.limit-focus { background: rgba(59, 13
     word-break: break-all;
     user-select: all;
 }
+.tg-open { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 48px; margin: 6px 0 12px; border-radius: 10px; background: #229ed9; color: #fff; font-weight: 800; text-decoration: none; box-sizing: border-box; padding: 10px 14px; text-align: center; }
+.tg-open:hover, .tg-open:focus-visible { background: #1b8cc2; }
+.tg-open[hidden] { display: none; }
 #copiarCodigo { width: 100%; min-height: 44px; margin-top: 10px; border: 1.5px solid #229ed9; border-radius: 10px; background: #fff; color: #0369a1; font-weight: 800; cursor: pointer; }
 .tg-code small { display: block; margin-top: 8px; color: #0c4a6e; font-size: 0.8rem; }
 .tg-status { display: block; margin-top: 12px; font-size: 0.85rem; color: #475569; min-height: 0; }
