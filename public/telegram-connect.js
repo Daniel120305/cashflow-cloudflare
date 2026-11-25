@@ -70,7 +70,10 @@
   .tgc-card-act{display:flex;gap:8px;flex:none;align-items:center}
   .tgc-card-act .tgc-btn{width:auto;margin:0;min-height:44px;padding:8px 18px;white-space:nowrap}
   .tgc-card-act .tgc-btn.link{margin:0;padding:8px 10px}
-  .tgc-chip{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:999px;font-size:.75rem;font-weight:700;background:#e2e8f0;color:#475569;vertical-align:middle}
+  .tgc-chip{display:inline-flex;align-items:center;flex:none;padding:2px 9px;border-radius:999px;font-size:.75rem;font-weight:700;line-height:1.4;white-space:nowrap;background:#e2e8f0;color:#475569}
+  /* Item "Telegram" do menu do usuário: logo, texto e selo na mesma linha, centralizados */
+  .user-dropdown [data-telegram-open]{display:flex!important;align-items:center;gap:8px;flex-wrap:nowrap;text-align:left;white-space:nowrap}
+  .user-dropdown [data-telegram-open] .tg-logo-inline{line-height:1.2}
   .tgc-chip.on{background:#dcfce7;color:#15803d}
   .tgc-chip.off{background:#e0f2fe;color:#0369a1}
   @media (max-width:640px){.tgc-card{flex-wrap:wrap;padding:16px}.tgc-card-act{width:100%}.tgc-card-act .tgc-btn:not(.link){flex:1}}
