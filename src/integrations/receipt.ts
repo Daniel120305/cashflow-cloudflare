@@ -72,6 +72,11 @@ export function categoryLabel(category: string): string {
         "outros-despesas": "Outros",
         "outros-receitas": "Outras receitas",
         salario: "Salário",
+        freelance: "Freelance",
+        investimentos: "Investimentos",
+        moradia: "Moradia",
+        educacao: "Educação",
+        lazer: "Lazer",
       } as Record<string, string>
     )[category] ?? category
   );

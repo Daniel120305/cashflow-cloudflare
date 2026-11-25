@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Database } from "../db.js";
 import { userDatabase } from "../db.js";
-import { categoryLabel, extractReceipt, parseTransaction } from "./receipt.js";
+import { categoryLabel, extractReceipt, parseTransaction, brazilToday } from "./receipt.js";
 type Input = {
   description: string;
   amount: string;
@@ -16,7 +16,74 @@ type Deps = {
   fetcher?: typeof fetch;
   ocr?: (image: Uint8Array) => Promise<string>;
   record: (userId: number, input: Input) => Promise<any>;
-  summary: (userId: number) => Promise<any>;
+  summary: (userId: number, month?: string) => Promise<any>;
+  // Endereço do site, para os botões "Abrir o CashFlow".
+  siteUrl?: string;
+};
+// Texto do usuário dentro de mensagens HTML do Telegram.
+const esc = (s: unknown) =>
+  String(s ?? "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!);
+// Barra de progresso: ▰▰▰▱▱▱▱▱▱▱ 30%
+const bar = (pct: number) => {
+  const n = Math.max(0, Math.min(10, Math.round(pct / 10)));
+  return "▰".repeat(n) + "▱".repeat(10 - n);
+};
+const monthName = (ym: string) =>
+  new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(ym + "-15T12:00:00Z"));
+const previousMonth = (ym: string) => {
+  const d = new Date(ym + "-15T12:00:00Z");
+  d.setUTCMonth(d.getUTCMonth() - 1);
+  return d.toISOString().slice(0, 7);
+};
+const DICAS = [
+  "Anote todo gasto no mesmo dia: é mais fácil lembrar e o resumo do mês fica fiel.",
+  "Regra 50-30-20: 50% para necessidades, 30% para desejos e 20% para poupar ou investir.",
+  "Antes de uma compra por impulso, espere 24 horas. Se ainda quiser, compre sem culpa.",
+  "Monte uma reserva de emergência de 3 a 6 meses dos seus gastos fixos antes de investir em risco.",
+  "Revise assinaturas e serviços todo mês: streaming e apps esquecidos somam muito no ano.",
+  "Defina um gasto máximo mensal no CashFlow: o bot avisa quando você chegar a 80%.",
+  "Pague a fatura do cartão inteira: os juros do rotativo estão entre os mais altos do país.",
+  "Separe o dinheiro de poupar logo que o salário cair, e não o que sobrar no fim do mês.",
+  "Compare o preço por quilo ou por litro no mercado: o pacote maior nem sempre sai mais barato.",
+  "Tenha metas com valor e prazo (ex.: R$ 3.000 até dezembro). Metas concretas são mais fáceis de cumprir.",
+  "Use /categorias para ver onde mais gasta: o maior corte costuma estar na maior categoria.",
+  "Leve marmita alguns dias da semana: pequenas economias diárias viram muito no mês.",
+];
+export const HELP_TEXT = [
+  "<b>💰 CashFlow — comandos</b>",
+  "",
+  "<b>Registrar</b>",
+  "• <code>despesa mercado 35,90</code> — registra uma despesa",
+  "• <code>receita salário 3000</code> — registra uma receita",
+  "• 📷 Foto do cupom fiscal — leio e pergunto se confirmo",
+  "• /desfazer — apaga o último lançamento",
+  "",
+  "<b>Consultar</b>",
+  "• /saldo — saldo total e do mês",
+  "• /mes — resumo do mês e comparação com o anterior",
+  "• /hoje — lançamentos de hoje",
+  "• /extrato — últimos 10 lançamentos",
+  "• /categorias — onde você mais gastou no mês",
+  "• /limite — gasto máximo: quanto já usou e quanto falta",
+  "",
+  "<b>Outros</b>",
+  "• /dica — uma dica rápida de finanças",
+  "• /site — abrir o CashFlow",
+  "• /desvincular — desligar este Telegram da sua conta",
+].join("\n");
+const MENU = {
+  inline_keyboard: [
+    [
+      { text: "💰 Saldo", callback_data: "cmd:saldo" },
+      { text: "📅 Mês", callback_data: "cmd:mes" },
+      { text: "🧾 Extrato", callback_data: "cmd:extrato" },
+    ],
+    [
+      { text: "📊 Categorias", callback_data: "cmd:categorias" },
+      { text: "🎯 Limite", callback_data: "cmd:limite" },
+      { text: "💡 Dica", callback_data: "cmd:dica" },
+    ],
+  ],
 };
 const brl = (value: unknown) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(
@@ -99,74 +166,249 @@ export class TelegramService {
     );
     // bigint no Supabase chega como texto: converte para número.
     const userId = linked.rows[0]?.usuario_id == null ? undefined : Number(linked.rows[0].usuario_id);
+    const cmd = command.match(/^\/([a-z_]+)(?:@\w+)?(?:\s+([\s\S]*))?$/i);
+    const name = cmd?.[1]?.toLowerCase();
     if (!userId) {
-      await this.send(
+      if (name === "ajuda" || name === "help") {
+        await this.html(chat, HELP_TEXT + "\n\n<i>Antes, vincule sua conta: no site, Perfil → Telegram → Gerar código.</i>", this.siteButton("Vincular no site", "/CashFlow_Tela_Perfil/perfil.html"));
+        return;
+      }
+      await this.html(
         chat,
-        "Vincule sua conta usando /vincular e o código gerado no CashFlow.",
+        "👋 <b>Olá! Eu sou o assistente do CashFlow.</b>\n\nPara usar, vincule sua conta:\n1. Entre no site e abra o <b>Perfil</b>\n2. Toque em <b>Telegram</b> e gere o código\n3. Toque em <b>Abrir no Telegram e vincular</b>",
+        this.siteButton("Abrir o CashFlow", "/CashFlow_Tela_Perfil/perfil.html"),
       );
       return;
     }
     if (cb) {
-      await this.confirm(chat, userId, String(cb.data ?? ""));
+      await this.callback(chat, userId, String(cb.data ?? ""));
       return;
     }
     if (message.photo?.length) {
       await this.photo(chat, userId, message.photo.at(-1));
       return;
     }
-    if (/^\/saldo(?:@\w+)?$/.test(command)) {
-      const result = await this.deps.summary(userId);
-      await this.send(
-        chat,
-        [
-          "Resumo financeiro",
-          `Saldo: ${brl(result.saldo_total ?? result.saldo ?? result.balance)}`,
-          `Receitas: ${brl(result.receitas ?? result.total_receitas ?? result.receitas_total)}`,
-          `Despesas: ${brl(result.despesas ?? result.total_despesas ?? result.despesas_total)}`,
-          `Gasto máximo: ${brl(result.gasto_maximo)}`,
-        ].join("\n"),
-      );
-      return;
-    }
-    if (/^\/extrato(?:@\w+)?$/.test(command)) {
-      const r = await userDatabase(this.deps.db, userId).query(
-        "SELECT descricao,valor,tipo,to_char(data_transacao,'DD/MM/YYYY') AS data FROM transacoes WHERE usuario_id=$1 ORDER BY data_transacao DESC,id DESC LIMIT 20",
-        [userId],
-      );
-      await this.send(
-        chat,
-        r.rows.length
-          ? r.rows
-              .map(
-                (x) =>
-                  `${x.data} • ${x.descricao} • ${x.tipo === "income" ? "+" : "−"} R$ ${Number(x.valor).toFixed(2)}`,
-              )
-              .join("\n")
-          : "Nenhuma transação.",
-      );
-      return;
-    }
+    if (name && (await this.command(chat, userId, name, (cmd![2] ?? "").trim(), update, message))) return;
     const parsed = parseTransaction(command);
     if (parsed) {
-      try {
-        await this.deps.record(userId, {
-          ...parsed,
-          idempotency_key: `telegram:${update.update_id ?? `${chat}:${message.message_id}`}`,
-        });
-      } catch (error: any) {
-        if (error?.statusCode >= 400 && error?.statusCode < 500) {
-          await this.send(chat, error.message);
-          return;
-        }
-        throw error;
-      }
-      await this.send(chat, "Transação registrada.");
+      await this.register(chat, userId, parsed, update, message);
       return;
     }
-    await this.send(
+    await this.html(
       chat,
-      "Use receita salário 1000,50, despesa mercado 30,00, /saldo, /extrato ou envie uma foto de comprovante.",
+      "Não entendi. 🤔\nExemplos: <code>despesa mercado 30,50</code> ou <code>receita salário 3000</code>.\nVeja tudo em /ajuda.",
+      { reply_markup: MENU },
     );
+  }
+  private async html(chat: number | string, text: string, options: object = {}) {
+    await this.send(chat, text, { parse_mode: "HTML", disable_web_page_preview: true, ...options });
+  }
+  private siteButton(label: string, path = "/") {
+    if (!this.deps.siteUrl) return {};
+    return { reply_markup: { inline_keyboard: [[{ text: label, url: new URL(path, this.deps.siteUrl).toString() }]] } };
+  }
+  private scoped(userId: number) {
+    return userDatabase(this.deps.db, userId);
+  }
+  private async register(chat: number, userId: number, parsed: any, update: any, message: any) {
+    try {
+      await this.deps.record(userId, {
+        ...parsed,
+        idempotency_key: `telegram:${update.update_id ?? `${chat}:${message.message_id}`}`,
+      });
+    } catch (error: any) {
+      if (error?.statusCode >= 400 && error?.statusCode < 500) {
+        await this.send(chat, error.message);
+        return;
+      }
+      throw error;
+    }
+    const income = parsed.type === "income";
+    await this.html(
+      chat,
+      `${income ? "🟢 Receita" : "🔴 Despesa"} registrada!\n<b>${esc(parsed.description)}</b> · ${brl(parsed.amount)}\n${esc(categoryLabel(parsed.category))} · ${parsed.date.split("-").reverse().join("/")}`,
+      { reply_markup: { inline_keyboard: [[{ text: "↩️ Desfazer", callback_data: "cmd:desfazer" }, { text: "💰 Saldo", callback_data: "cmd:saldo" }]] } },
+    );
+  }
+  // Devolve true se o comando foi reconhecido.
+  private async command(chat: number, userId: number, name: string, args: string, update: any, message: any): Promise<boolean> {
+    const month = brazilToday().slice(0, 7);
+    switch (name) {
+      case "start":
+      case "ajuda":
+      case "help":
+      case "menu":
+        await this.html(chat, name === "start" ? "👋 <b>Bem-vindo de volta ao CashFlow!</b>\n\n" + HELP_TEXT : HELP_TEXT, { reply_markup: MENU });
+        return true;
+      case "despesa":
+      case "receita": {
+        const parsed = args ? parseTransaction(`${name} ${args}`) : null;
+        if (!parsed) {
+          await this.html(chat, `Use assim: <code>/${name} ${name === "despesa" ? "mercado 35,90" : "salário 3000"}</code>\n(descrição e valor)`);
+          return true;
+        }
+        await this.register(chat, userId, parsed, update, message);
+        return true;
+      }
+      case "saldo": {
+        const s = await this.deps.summary(userId);
+        const lines = [
+          `<b>💰 Saldo total: ${brl(s.saldo_total)}</b>`,
+          "",
+          `<b>${esc(monthName(s.mes))}</b>`,
+          `🟢 Receitas: ${brl(s.receitas)}`,
+          `🔴 Despesas: ${brl(s.despesas)}`,
+          `= Saldo do mês: ${brl(s.saldo)}`,
+        ];
+        if (s.gasto_maximo > 0) lines.push("", `🎯 Limite: ${bar(s.percentual)} ${Math.round(s.percentual)}% de ${brl(s.gasto_maximo)}`);
+        await this.html(chat, lines.join("\n"), { reply_markup: MENU });
+        return true;
+      }
+      case "mes": {
+        const [atual, anterior] = [await this.deps.summary(userId, month), await this.deps.summary(userId, previousMonth(month))];
+        const diff = atual.despesas - anterior.despesas;
+        const comp = anterior.despesas > 0
+          ? `${diff > 0 ? "📈" : "📉"} Despesas ${diff > 0 ? "acima" : "abaixo"} do mês passado em ${brl(Math.abs(diff))} (${Math.round((Math.abs(diff) / anterior.despesas) * 100)}%)`
+          : "Sem despesas no mês passado para comparar.";
+        await this.html(chat, [
+          `<b>📅 ${esc(monthName(month))}</b>`,
+          `🟢 Receitas: ${brl(atual.receitas)}`,
+          `🔴 Despesas: ${brl(atual.despesas)}`,
+          `= Saldo do mês: <b>${brl(atual.saldo)}</b>`,
+          "",
+          `<i>${esc(monthName(previousMonth(month)))}: despesas de ${brl(anterior.despesas)}</i>`,
+          comp,
+        ].join("\n"), { reply_markup: MENU });
+        return true;
+      }
+      case "hoje": {
+        const r = await this.scoped(userId).query(
+          "SELECT descricao,valor,tipo FROM transacoes WHERE usuario_id=$1 AND data_transacao=$2 ORDER BY id",
+          [userId, brazilToday()],
+        );
+        if (!r.rows.length) {
+          await this.html(chat, "Nenhum lançamento hoje. 🙂\nRegistre com <code>despesa café 6,50</code>.");
+          return true;
+        }
+        let gastos = 0, entradas = 0;
+        const linhas = r.rows.map((x: any) => {
+          if (x.tipo === "income") entradas += Number(x.valor); else gastos += Number(x.valor);
+          return `${x.tipo === "income" ? "🟢" : "🔴"} ${esc(x.descricao)} · ${brl(x.valor)}`;
+        });
+        await this.html(chat, [`<b>📆 Hoje</b>`, ...linhas, "", `Gastos: <b>${brl(gastos)}</b>${entradas ? ` · Entradas: ${brl(entradas)}` : ""}`].join("\n"));
+        return true;
+      }
+      case "extrato": {
+        const r = await this.scoped(userId).query(
+          "SELECT descricao,valor,tipo,to_char(data_transacao,'DD/MM') AS data FROM transacoes WHERE usuario_id=$1 ORDER BY data_transacao DESC,id DESC LIMIT 10",
+          [userId],
+        );
+        await this.html(
+          chat,
+          r.rows.length
+            ? ["<b>🧾 Últimos lançamentos</b>", ...r.rows.map((x: any) => `${x.data} ${x.tipo === "income" ? "🟢" : "🔴"} ${esc(x.descricao)} · ${x.tipo === "income" ? "+" : "−"}${brl(x.valor)}`)].join("\n")
+            : "Nenhum lançamento ainda.",
+          this.siteButton("Ver tudo no site", "/CashFlow_Tela_HomePage/home.html"),
+        );
+        return true;
+      }
+      case "categorias": {
+        const r = await this.scoped(userId).query(
+          "SELECT categoria,SUM(valor) AS total FROM transacoes WHERE usuario_id=$1 AND tipo='expense' AND data_transacao>=($2||'-01')::date AND data_transacao<(($2||'-01')::date+INTERVAL '1 month') GROUP BY categoria ORDER BY total DESC LIMIT 8",
+          [userId, month],
+        );
+        if (!r.rows.length) {
+          await this.html(chat, `Nenhuma despesa em ${esc(monthName(month))} ainda.`);
+          return true;
+        }
+        const total = r.rows.reduce((t: number, x: any) => t + Number(x.total), 0);
+        await this.html(chat, [
+          `<b>📊 Despesas por categoria — ${esc(monthName(month))}</b>`,
+          ...r.rows.map((x: any) => {
+            const pct = (Number(x.total) / total) * 100;
+            return `${esc(categoryLabel(x.categoria))}: <b>${brl(x.total)}</b>\n${bar(pct)} ${Math.round(pct)}%`;
+          }),
+          "",
+          `Total: <b>${brl(total)}</b>`,
+        ].join("\n"));
+        return true;
+      }
+      case "limite": {
+        const s = await this.deps.summary(userId);
+        if (!(s.gasto_maximo > 0)) {
+          await this.html(chat, "Você ainda não definiu um gasto máximo mensal. 🎯\nDefina no site e eu aviso quando chegar a 80% e a 100%.", this.siteButton("Definir gasto máximo", "/CashFlow_Tela_Perfil/perfil.html#gasto-maximo"));
+          return true;
+        }
+        const resta = s.gasto_maximo - s.despesas;
+        const hoje = new Date(brazilToday() + "T12:00:00Z");
+        const fim = new Date(Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth() + 1, 0));
+        const dias = fim.getUTCDate() - hoje.getUTCDate() + 1;
+        await this.html(chat, [
+          `<b>🎯 Gasto máximo de ${esc(monthName(s.mes))}</b>`,
+          `${bar(s.percentual)} ${Math.round(s.percentual)}%`,
+          `Gasto: ${brl(s.despesas)} de ${brl(s.gasto_maximo)}`,
+          resta >= 0
+            ? `Ainda pode gastar: <b>${brl(resta)}</b> (≈ ${brl(resta / dias)} por dia nos ${dias} dias restantes)`
+            : `⚠️ Passou do limite em <b>${brl(-resta)}</b>.`,
+        ].join("\n"));
+        return true;
+      }
+      case "desfazer": {
+        const r = await this.scoped(userId).query(
+          "SELECT id,descricao,valor,tipo,to_char(data_transacao,'DD/MM/YYYY') AS data FROM transacoes WHERE usuario_id=$1 ORDER BY id DESC LIMIT 1",
+          [userId],
+        );
+        const t = r.rows[0];
+        if (!t) {
+          await this.send(chat, "Não há lançamentos para desfazer.");
+          return true;
+        }
+        await this.html(chat, `Apagar o último lançamento?\n${t.tipo === "income" ? "🟢" : "🔴"} <b>${esc(t.descricao)}</b> · ${brl(t.valor)} · ${t.data}`, {
+          reply_markup: { inline_keyboard: [[{ text: "🗑 Apagar", callback_data: `desfazer:${t.id}` }, { text: "Manter", callback_data: "manter" }]] },
+        });
+        return true;
+      }
+      case "dica":
+        await this.html(chat, `💡 <b>Dica</b>\n${esc(DICAS[Math.floor(Math.random() * DICAS.length)])}`, {
+          reply_markup: { inline_keyboard: [[{ text: "💡 Outra dica", callback_data: "cmd:dica" }]] },
+        });
+        return true;
+      case "site":
+        await this.html(chat, "Abra o CashFlow pelo botão abaixo:", this.siteButton("🌐 Abrir o CashFlow", "/CashFlow_Tela_HomePage/home.html"));
+        return true;
+      case "desvincular":
+        await this.html(chat, "Desligar este Telegram da sua conta do CashFlow? Seus dados no site continuam.", {
+          reply_markup: { inline_keyboard: [[{ text: "Desvincular", callback_data: "desvincular:sim" }, { text: "Cancelar", callback_data: "manter" }]] },
+        });
+        return true;
+      default:
+        return false;
+    }
+  }
+  private async callback(chat: number, userId: number, data: string) {
+    if (data.startsWith("cmd:")) {
+      await this.command(chat, userId, data.slice(4), "", {}, {});
+      return;
+    }
+    if (data === "manter") {
+      await this.send(chat, "Ok, nada foi alterado.");
+      return;
+    }
+    const undo = data.match(/^desfazer:(\d+)$/);
+    if (undo) {
+      const r = await this.scoped(userId).query(
+        "DELETE FROM transacoes WHERE id=$1 AND usuario_id=$2 RETURNING descricao,valor",
+        [undo[1], userId],
+      );
+      await this.html(chat, r.rows[0] ? `🗑 Apagado: <b>${esc(r.rows[0].descricao)}</b> · ${brl(r.rows[0].valor)}` : "Esse lançamento já não existe.");
+      return;
+    }
+    if (data === "desvincular:sim") {
+      await this.deps.db.query("DELETE FROM telegram_vinculos WHERE usuario_id=$1 AND telegram_id=$2", [userId, chat]);
+      await this.send(chat, "Telegram desvinculado. Para ligar de novo, gere um código no Perfil do site.");
+      return;
+    }
+    await this.confirm(chat, userId, data);
   }
   private async confirm(chat: number, userId: number, data: string) {
     const m = data.match(/^(confirmar|cancelar):(\d+)$/);

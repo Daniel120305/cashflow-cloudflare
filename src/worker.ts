@@ -9,7 +9,7 @@ import { checkEmailDomain } from "./integrations/email-check.js";
 import { googleVerifier } from "./integrations/google.js";
 import { TelegramService } from "./integrations/telegram.js";
 import { workersAiOcr } from "./integrations/ocr.js";
-import { ensureWebhook, webhookSecret } from "./integrations/telegram-setup.js";
+import { ensureWebhook, ensureProfile, webhookSecret } from "./integrations/telegram-setup.js";
 import { saveTransaction, monthlySummary } from "./services/finance.js";
 import { drainQueues, cleanup } from "./services/queues.js";
 
@@ -45,6 +45,20 @@ const syncWebhook = (env: Env, force = false) =>
     ? ensureWebhook(env.TELEGRAM_BOT_TOKEN, env.APP_ORIGIN, tgSecret(env)!, fetch, force)
     : Promise.resolve("sem token");
 
+// Foto do bot: public/bot-avatar.jpg, lida dos próprios arquivos do site.
+const syncProfile = (env: Env, force = false) =>
+  env.TELEGRAM_BOT_TOKEN && env.APP_ORIGIN
+    ? ensureProfile(
+        env.TELEGRAM_BOT_TOKEN,
+        async () => {
+          const r = await env.ASSETS.fetch(new Request(new URL("/bot-avatar.jpg", env.APP_ORIGIN).toString()));
+          return r.ok ? await r.blob() : undefined;
+        },
+        fetch,
+        force,
+      )
+    : Promise.resolve("sem token");
+
 const telegramFor = (db: Database, env: Env) =>
   env.TELEGRAM_BOT_TOKEN
     ? new TelegramService({
@@ -52,7 +66,8 @@ const telegramFor = (db: Database, env: Env) =>
         token: env.TELEGRAM_BOT_TOKEN,
         ocr: workersAiOcr(env.AI),
         record: (uid, input) => saveTransaction(db, uid, input),
-        summary: (uid) => monthlySummary(db, uid),
+        summary: (uid, month) => monthlySummary(db, uid, month),
+        siteUrl: env.APP_ORIGIN,
       })
     : undefined;
 
@@ -78,6 +93,7 @@ export async function handleApi(request: Request, env: Env, ctx: Ctx, db: Databa
   const response = await app.handle(request);
   // Confere o webhook do bot de vez em quando (no máx. a cada 10 min por instância).
   later(syncWebhook(env));
+  later(syncProfile(env));
   return { response, background };
 }
 
@@ -113,6 +129,7 @@ export default {
     const run = async () => {
       try {
         await syncWebhook(env, true).catch((e) => console.error("Webhook do Telegram:", String(e)));
+        await syncProfile(env, true).catch((e) => console.error("Perfil do bot:", String(e)));
         await drainQueues(db, telegramFor(db, env));
         // Limpeza uma vez por hora: poupa a cota diária de consultas do Hyperdrive.
         if (new Date(controller.scheduledTime).getUTCMinutes() < 5) await cleanup(db);

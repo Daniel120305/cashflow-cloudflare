@@ -8,11 +8,77 @@ import { createHash } from "node:crypto";
 export const webhookSecret = (token: string, explicit?: string) =>
   explicit || createHash("sha256").update("cashflow-webhook:" + token).digest("hex");
 
-const COMMANDS = [
-  { command: "saldo", description: "Resumo do mês: saldo, receitas e despesas" },
-  { command: "extrato", description: "Últimas 20 transações" },
-  { command: "vincular", description: "Vincular sua conta do CashFlow (código do perfil)" },
+export const COMMANDS = [
+  { command: "saldo", description: "💰 Saldo total e do mês" },
+  { command: "mes", description: "📅 Resumo do mês e comparação com o anterior" },
+  { command: "hoje", description: "📆 Lançamentos de hoje" },
+  { command: "extrato", description: "🧾 Últimos 10 lançamentos" },
+  { command: "categorias", description: "📊 Onde você mais gastou no mês" },
+  { command: "limite", description: "🎯 Gasto máximo: usado e restante" },
+  { command: "despesa", description: "🔴 Registrar despesa (ex.: /despesa mercado 35,90)" },
+  { command: "receita", description: "🟢 Registrar receita (ex.: /receita salário 3000)" },
+  { command: "desfazer", description: "↩️ Apagar o último lançamento" },
+  { command: "dica", description: "💡 Dica rápida de finanças" },
+  { command: "site", description: "🌐 Abrir o CashFlow" },
+  { command: "ajuda", description: "❓ Todos os comandos e exemplos" },
+  { command: "vincular", description: "🔗 Vincular sua conta (código do Perfil)" },
+  { command: "desvincular", description: "⛔ Desligar este Telegram da conta" },
 ];
+export const BOT_NAME = "CashFlow";
+// "O que este bot faz?" (aparece antes de iniciar a conversa).
+export const BOT_DESCRIPTION =
+  "Seu assistente financeiro do CashFlow 💰\n\n" +
+  "• Registre gastos e receitas mandando mensagem: \"despesa mercado 35,90\"\n" +
+  "• Mande a foto do cupom fiscal e eu leio o valor\n" +
+  "• Consulte saldo, extrato, categorias e seu limite de gastos\n" +
+  "• Receba alertas quando chegar a 80% do limite\n\n" +
+  "Para começar, vincule sua conta no Perfil do site.";
+// Bio do perfil do bot (até 120 caracteres).
+export const BOT_SHORT = "Assistente do CashFlow: registre gastos, veja seu saldo e receba alertas pelo Telegram.";
+
+async function call(token: string, method: string, body: object | FormData, fetcher: typeof fetch) {
+  const isForm = body instanceof FormData;
+  const r = await fetcher(`https://api.telegram.org/bot${token}/${method}`, {
+    method: "POST",
+    headers: isForm ? undefined : { "content-type": "application/json" },
+    body: isForm ? body : JSON.stringify(body),
+    signal: AbortSignal.timeout(15000),
+  });
+  const data = (await r.json()) as any;
+  if (!data.ok) throw new Error(`Telegram ${method}: ${data.description ?? r.status}`);
+  return data.result;
+}
+
+// Nome, descrição, bio, comandos e foto do bot. Só mexe quando a descrição
+// no Telegram é diferente da atual (assim a foto não é reenviada toda hora).
+let profileAt = 0;
+export async function ensureProfile(
+  token: string,
+  avatar: () => Promise<Blob | undefined>,
+  fetcher: typeof fetch = fetch,
+  force = false,
+) {
+  if (!force && Date.now() - profileAt < 30 * 60000) return "recente";
+  profileAt = Date.now();
+  const current = await call(token, "getMyDescription", {}, fetcher);
+  const cmds = await call(token, "getMyCommands", {}, fetcher);
+  const sameCommands = JSON.stringify((cmds ?? []).map((c: any) => c.command)) === JSON.stringify(COMMANDS.map((c) => c.command));
+  if (current?.description === BOT_DESCRIPTION && sameCommands) return "ok";
+  await call(token, "setMyCommands", { commands: COMMANDS }, fetcher);
+  await call(token, "setMyName", { name: BOT_NAME }, fetcher).catch((e) => console.warn(String(e)));
+  await call(token, "setMyShortDescription", { short_description: BOT_SHORT }, fetcher);
+  const image = await avatar().catch(() => undefined);
+  if (image) {
+    const form = new FormData();
+    form.append("photo", JSON.stringify({ type: "static", photo: "attach://avatar" }));
+    form.append("avatar", image, "cashflow.jpg");
+    await call(token, "setMyProfilePhoto", form, fetcher).catch((e) => console.warn("Foto do bot:", String(e)));
+  }
+  // Por último: é o que marca o perfil como atualizado.
+  await call(token, "setMyDescription", { description: BOT_DESCRIPTION }, fetcher);
+  console.log("[CashFlow] Perfil do bot atualizado (nome, descrição, comandos e foto).");
+  return "atualizado";
+}
 
 let checkedAt = 0;
 export async function ensureWebhook(
@@ -45,7 +111,6 @@ export async function ensureWebhook(
     allowed_updates: ["message", "callback_query"],
     max_connections: 10,
   });
-  await api("setMyCommands", { commands: COMMANDS }).catch(() => {});
   console.log("[CashFlow] Webhook do Telegram apontado para", url);
   return "atualizado";
 }

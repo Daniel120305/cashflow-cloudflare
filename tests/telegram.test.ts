@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { handleApi, type Env } from "../src/worker.js";
 import { wrapPool } from "../src/db.js";
 import { miniPool } from "./pgmini.js";
-import { ensureWebhook, webhookSecret } from "../src/integrations/telegram-setup.js";
+import { ensureWebhook, ensureProfile, webhookSecret, COMMANDS } from "../src/integrations/telegram-setup.js";
 
 const ORIGIN = "http://localhost:8787";
 const TOKEN = "123:TESTE";
@@ -21,9 +21,11 @@ globalThis.fetch = (async function (this: any, url: any, init?: any) {
   const u = String(url);
   if (u.startsWith("https://api.telegram.org/")) {
     const method = u.split("/").pop();
-    const body = init?.body ? JSON.parse(init.body) : {};
+    const body = init?.body instanceof FormData ? Object.fromEntries(init.body) : init?.body ? JSON.parse(init.body) : {};
     sent.push({ method, body });
     if (method === "getWebhookInfo") return Response.json({ ok: true, result: { url: "" } });
+    if (method === "getMyDescription") return Response.json({ ok: true, result: { description: "" } });
+    if (method === "getMyCommands") return Response.json({ ok: true, result: [] });
     return Response.json({ ok: true, result: true });
   }
   return realFetch(url, init);
@@ -59,7 +61,16 @@ test("webhook automático aponta para o site e cadastra comandos", async () => {
   const set = sent.find((s) => s.method === "setWebhook");
   assert.equal(set.body.url, ORIGIN + "/api/telegram/webhook");
   assert.equal(set.body.secret_token, secret);
-  assert.ok(sent.some((s) => s.method === "setMyCommands"));
+});
+
+test("perfil do bot: nome, descrição, comandos e foto", async () => {
+  sent.length = 0;
+  const r = await ensureProfile(TOKEN, async () => new Blob([new Uint8Array([0xff, 0xd8, 0xff])], { type: "image/jpeg" }), fetch, true);
+  assert.equal(r, "atualizado");
+  const methods = sent.map((x) => x.method);
+  for (const m of ["setMyCommands", "setMyName", "setMyShortDescription", "setMyProfilePhoto", "setMyDescription"]) assert.ok(methods.includes(m), m);
+  assert.equal(sent.find((x) => x.method === "setMyCommands").body.commands.length, COMMANDS.length);
+  assert.match(String(sent.find((x) => x.method === "setMyProfilePhoto").body.photo), /attach:\/\/avatar/);
 });
 
 test("vincular pelo código, registrar despesa, /saldo e /extrato", async () => {
@@ -85,4 +96,32 @@ test("vincular pelo código, registrar despesa, /saldo e /extrato", async () => 
   const tx = await call("GET", "/api/transacoes");
   assert.equal(tx.data.transactions.length, 1);
   assert.equal(tx.data.transactions[0].amount, 30.5);
+
+  const reply = async (text: string) => {
+    sent.length = 0;
+    await hook(msg(text));
+    return sent.filter((s) => s.method === "sendMessage").map((s) => s.body.text).join("\n---\n");
+  };
+  const cbk = async (data: string) => {
+    sent.length = 0;
+    await hook({ update_id: ++upd, callback_query: { id: "cb" + upd, data, from: { id: 777, username: "Amanda_Teste" }, message: { message_id: upd, chat: { id: 777, type: "private" } } } });
+    return sent.filter((s) => s.method === "sendMessage").map((s) => s.body.text).join("\n---\n");
+  };
+  assert.match(await reply("/ajuda"), /\/categorias/);
+  assert.match(await reply("/receita salário 1000"), /Receita registrada/);
+  assert.match(await reply("/despesa"), /Use assim/);
+  assert.match(await reply("/mes"), /Saldo do mês/);
+  assert.match(await reply("/hoje"), /mercado/);
+  assert.match(await reply("/categorias"), /Alimentação: <b>R\$\s?30,50<\/b>/);
+  assert.match(await reply("/limite"), /ainda não definiu/);
+  assert.match(await reply("/dica"), /Dica/);
+  assert.match(await reply("bom dia"), /Não entendi/);
+  assert.match(await cbk("cmd:saldo"), /Saldo total/);
+  const pergunta = await reply("/desfazer");
+  assert.match(pergunta, /salário/);
+  const undoId = sent.find((s) => s.method === "sendMessage").body.reply_markup.inline_keyboard[0][0].callback_data;
+  assert.match(await cbk(undoId), /Apagado/);
+  assert.equal((await call("GET", "/api/transacoes")).data.transactions.length, 1);
+  assert.match(await cbk("desvincular:sim"), /desvinculado/);
+  assert.match(await reply("/saldo"), /vincule sua conta/);
 });
