@@ -97,7 +97,8 @@ export class TelegramService {
       "SELECT usuario_id FROM telegram_vinculos WHERE telegram_id=$1 AND usado_em IS NOT NULL",
       [from.id],
     );
-    const userId = linked.rows[0]?.usuario_id;
+    // bigint no Supabase chega como texto: converte para número.
+    const userId = linked.rows[0]?.usuario_id == null ? undefined : Number(linked.rows[0].usuario_id);
     if (!userId) {
       await this.send(
         chat,

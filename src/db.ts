@@ -10,8 +10,10 @@ export interface Database {
 
 // Toda consulta "do usuário" roda numa transação com o papel cashflow_app e
 // app.user_id definido: as políticas RLS do banco só mostram os dados dele.
-export function userDatabase(db: Database, userId: number): Database {
-  if (!Number.isSafeInteger(userId) || userId <= 0)
+export function userDatabase(db: Database, rawUserId: number | string): Database {
+  // No Supabase algumas colunas de id são bigint e o driver devolve texto ("2").
+  const userId = typeof rawUserId === "string" && /^\d+$/.test(rawUserId) ? Number(rawUserId) : rawUserId;
+  if (typeof userId !== "number" || !Number.isSafeInteger(userId) || userId <= 0)
     throw new Error("Usuário inválido para transação.");
   return {
     query: (sql, values) =>

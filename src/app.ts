@@ -161,7 +161,7 @@ export async function buildApp(
     );
     if (!result.rows[0])
       throw new HttpError(401, "Sessão expirada. Faça login novamente.");
-    req.userId = result.rows[0].usuario_id;
+    req.userId = Number(result.rows[0].usuario_id);
   });
   const body = (req: Req): Record<string, any> => {
     if (!req.body || typeof req.body !== "object" || Array.isArray(req.body))

@@ -212,3 +212,11 @@ test("verificação de email por DNS-over-HTTPS e login Google por WebCrypto", a
     globalThis.fetch = realFetch;
   }
 });
+
+test("id do usuário em texto (bigint do Supabase) funciona nas consultas por usuário", async () => {
+  const { userDatabase } = await import("../src/db.js");
+  const id = (await db.query("SELECT id FROM usuarios WHERE email=$1", [newEmail])).rows[0].id;
+  const r = await userDatabase(db, String(id)).query("SELECT current_setting('app.user_id') AS u");
+  assert.equal(r.rows[0].u, String(id));
+  assert.throws(() => userDatabase(db, "2; drop table x" as any));
+});
