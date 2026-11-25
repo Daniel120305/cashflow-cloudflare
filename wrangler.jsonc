@@ -1,7 +1,7 @@
 // Configuração do CashFlow na Cloudflare (Workers).
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "cashflow",
+  "name": "app",
   "main": "src/worker.ts",
   "compatibility_date": "2026-11-01",
   // nodejs_compat: o driver pg e o node:crypto funcionam no Worker.
@@ -31,7 +31,7 @@
   // TELEGRAM_*) ficam em Settings → Variables and Secrets, como "Secret".
   "vars": {
     "NODE_ENV": "production",
-    "APP_ORIGIN": "https://cashflow.danielboucas.workers.dev",
+    "APP_ORIGIN": "https://app.cashflow-pi.workers.dev",
     "GOOGLE_CLIENT_ID": "151840248473-tnnstieeiun7tpjcahpbs1qbnl6tnse4.apps.googleusercontent.com"
   },
   "observability": { "enabled": true }

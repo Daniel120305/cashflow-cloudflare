@@ -1,5 +1,7 @@
 # CashFlow na Cloudflare
 
+No ar em **https://app.cashflow-pi.workers.dev**
+
 Versão do CashFlow para rodar na **Cloudflare Workers**, no lugar do Render.
 Usa o **mesmo banco Supabase**: nenhum dado precisa ser copiado, e o site antigo
 no Render pode continuar no ar durante a troca.
