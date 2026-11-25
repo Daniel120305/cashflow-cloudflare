@@ -40,7 +40,7 @@ tests/               testes locais contra PostgreSQL
   função `extractReceipt` de antes.
 - **Login com Google:** conferido com WebCrypto, sem a `google-auth-library`.
 - **Verificação de domínio do email:** DNS-over-HTTPS (1.1.1.1), sem `node:dns`.
-- **Email:** só pela API do Brevo, porque o Worker não abre conexões SMTP.
+- **Email:** SMTP com as mesmas variáveis `SMTP_*` do Render, escrito sobre os sockets TCP da Cloudflare porque o nodemailer não roda no Worker. Portas 587 ou 465; a 25 é bloqueada. A API do Brevo continua como opção.
 - **Tarefas de fundo** (filas do Telegram, alertas e limpeza): rodam depois de cada
   mensagem e num cron a cada 5 minutos, em vez de um processo sempre ligado.
 
@@ -69,13 +69,12 @@ A cada commit na `main`, a Cloudflare publica sozinha, como acontecia no Render.
 
 ### 3. Variáveis (Worker → Settings → Variables and Secrets)
 
+`APP_ORIGIN` e `GOOGLE_CLIENT_ID` já estão em `wrangler.jsonc`. As chaves abaixo entram no painel como **Secret**:
+
 | Nome | Tipo | Valor |
 |---|---|---|
-| `APP_ORIGIN` | Text | endereço do site, ex.: `https://cashflow.<sua-conta>.workers.dev` |
 | `EMAIL_TOKEN_SECRET` | Secret | um texto aleatório longo (assina os links de confirmação de email) |
-| `BREVO_API_KEY` | Secret | a mesma chave usada no Render |
-| `MAIL_FROM` | Text | o mesmo remetente verificado no Brevo |
-| `GOOGLE_CLIENT_ID` | Text | se usar o login com Google (o mesmo do Render) |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Secret | os mesmos valores do Render |
 | `TELEGRAM_BOT_TOKEN` | Secret | se usar o bot (o mesmo do Render) |
 | `TELEGRAM_WEBHOOK_SECRET` | Secret | se usar o bot (o mesmo do Render) |
 

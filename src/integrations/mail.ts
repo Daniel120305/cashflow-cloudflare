@@ -1,3 +1,4 @@
+import { sendSmtp } from "./smtp.js";
 
 const appLink = (path: string, token: string) => {
   const origin = process.env.APP_ORIGIN;
@@ -103,7 +104,7 @@ function brevoSend(apiKey: string, from: string): Send {
   };
 }
 
-// Escolhe o canal uma vez: Brevo (API) ou, em desenvolvimento, o terminal.
+// Escolhe o canal uma vez: Brevo (API), SMTP ou, em desenvolvimento, o terminal.
 let cached: { send?: Send; dev: boolean } | undefined;
 function emailChannel() {
   if (cached) return cached;
@@ -119,8 +120,29 @@ function emailChannel() {
       return (cached = { send: brevoSend(brevoKey, from), dev: false });
     }
   }
-  // Sem Brevo: em desenvolvimento os links aparecem no terminal.
-  // (SMTP não é usado aqui: o Worker não abre conexões SMTP.)
+  // SMTP (mesmas variáveis do Render), pelos sockets TCP da Cloudflare.
+  if (process.env.SMTP_HOST && process.env.SMTP_FROM) {
+    const port = Number(process.env.SMTP_PORT ?? 587);
+    const config = {
+      host: process.env.SMTP_HOST.trim(),
+      port,
+      secure: process.env.SMTP_SECURE === "true" || port === 465,
+      user: process.env.SMTP_USER?.trim() || undefined,
+      password: process.env.SMTP_PASSWORD,
+      from: process.env.SMTP_FROM.trim(),
+    };
+    console.log("[CashFlow] Emails via SMTP:", config.host, port);
+    const send: Send = async (address, message) => {
+      try {
+        await sendSmtp(config, address, message);
+      } catch (error) {
+        console.error("Falha ao enviar email por SMTP. Confira as variáveis SMTP_*.", (error as Error)?.message);
+        throw new Error("Falha SMTP.");
+      }
+    };
+    return (cached = { send, dev: false });
+  }
+  // Sem email configurado: em desenvolvimento os links aparecem no terminal.
   return (cached = { send: undefined, dev: process.env.NODE_ENV !== "production" });
 }
 
