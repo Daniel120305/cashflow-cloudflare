@@ -4,7 +4,7 @@ import { userDatabase } from "../db.js";
 import { categoryLabel, parseTransaction, brazilToday } from "./receipt.js";
 import { readReceipt } from "./ocr.js";
 import { parseCorrection, parseNatural, intentOf, parseDelete, wordsToNumbers, EXPENSE_CATEGORIES, type Correction, type AiReading } from "./conversa.js";
-import { docKind, rowsFromDocument, extOf, type Row, type DocReading } from "./documents.js";
+import { docKind, rowsFromDocument, extOf, findMatrix, rowsFromMatrix, matrixChoice, MONTH_NAMES, type Row, type DocReading, type Matrix } from "./documents.js";
 type Input = {
   description: string;
   amount: string;
@@ -224,6 +224,12 @@ export class TelegramService {
     const cmd = command.match(/^\/([a-z_]+)(?:@\w+)?(?:\s+([\s\S]*))?$/i);
     const name = cmd?.[1]?.toLowerCase();
     if (name && (await this.command(chat, userId, name, (cmd![2] ?? "").trim(), update, message))) return;
+    // Há uma planilha de orçamento esperando a escolha da coluna/mês?
+    if (!name) {
+      const file = await this.pendingFile(userId, chat);
+      const todos = { months: MONTH_NAMES.slice(1).map((label, i) => ({ col: i, month: i + 1, label })), totalCol: null, items: [] };
+      if (file && matrixChoice(command, todos) !== undefined) return this.chooseMatrix(chat, userId, file.id, "", command);
+    }
     // Há um comprovante esperando confirmação? Texto livre pode ser correção.
     const pending = name ? null : await this.pending(userId, chat);
     if (pending) {
@@ -375,6 +381,9 @@ export class TelegramService {
       await this.send(chat, "Esse PDF parece ser só uma imagem escaneada, sem texto. 📷 Mande uma foto ou um print dele que eu leio.");
       return;
     }
+    // 0) Orçamento mensal em grade (itens x meses): pergunta o que importar.
+    const matrix = findMatrix(text);
+    if (matrix) return this.offerMatrix(chat, userId, doc.file_id, name, matrix);
     // 1) Planilhas/extratos: tabela lida por regras.
     const rows = rowsFromDocument(text);
     if (rows.length >= 2) return this.offerBatch(chat, userId, rows, name);
@@ -395,6 +404,100 @@ export class TelegramService {
       }, "📄 <b>Li este arquivo:</b>");
     }
     await this.send(chat, "Não encontrei valores para registrar nesse arquivo. 🤔 Se for um comprovante, tente mandar uma foto dele.");
+  }
+  private async fileText(fileId: string, name: string) {
+    const bytes = await this.download(fileId, 5 * 1024 * 1024, /^(documents|photos)\/[\w.\/-]+$/);
+    try {
+      return await this.deps.toMarkdown!(name, bytes);
+    } finally {
+      bytes.fill(0);
+    }
+  }
+  private async offerMatrix(chat: number, userId: number, fileId: string, name: string, m: Matrix) {
+    const r = await this.scoped(userId).query(
+      "INSERT INTO ocr_pendencias(telegram_id,usuario_id,descricao,valor,categoria,data_transacao,texto_ocr,expira_em) VALUES($1,$2,$3,0,'outros-despesas',$4,$5,NOW()+INTERVAL '30 minutes') RETURNING id",
+      [chat, userId, name.slice(0, 120), brazilToday(), `arquivo:${fileId}`],
+    );
+    const id = r.rows[0].id;
+    const total = rowsFromMatrix(m, "total");
+    const soma = (t: string) => total.filter((x) => x.type === t).reduce((a, x) => a + Number(x.amount), 0);
+    const renda = m.items.filter((i) => i.type === "income").length;
+    const atual = Number(brazilToday().slice(5, 7));
+    const temAtual = m.months.some((x) => x.month === atual);
+    const meses = m.months.map((x) => ({ text: x.label.slice(0, 9), callback_data: `mx:${id}:${x.month}` }));
+    const grade: any[][] = [];
+    for (let i = 0; i < meses.length; i += 4) grade.push(meses.slice(i, i + 4));
+    await this.html(
+      chat,
+      [
+        `📊 <b>Planilha de orçamento mensal</b> em <i>${esc(name.slice(0, 40))}</i>`,
+        `Meses: ${esc(m.months[0].label)} a ${esc(m.months.at(-1)!.label)} · ${m.totalCol !== null ? "coluna de total encontrada ✅" : "sem coluna de total (somo os meses)"}`,
+        `${renda} ite${renda === 1 ? "m" : "ns"} de renda · ${m.items.length - renda} de despesa`,
+        "",
+        `<b>No ano:</b> 🟢 ${brl(soma("income"))} · 🔴 ${brl(soma("expense"))}`,
+        "",
+        "<b>O que você quer importar?</b>",
+        "<i>Toque abaixo ou escreva, ex.: \"só a última coluna\", \"novembro\".</i>",
+      ].join("\n"),
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: "🧮 Total do ano", callback_data: `mx:${id}:total` },
+              ...(temAtual ? [{ text: `📅 Só ${MONTH_NAMES[atual]}`, callback_data: `mx:${id}:${atual}` }] : []),
+            ],
+            ...grade,
+            [{ text: "✖️ Cancelar", callback_data: `mx:${id}:no` }],
+          ],
+        },
+      },
+    );
+  }
+  private async pendingFile(userId: number, chat: number) {
+    const r = await this.scoped(userId).query(
+      "SELECT id,descricao,texto_ocr FROM ocr_pendencias WHERE usuario_id=$1 AND telegram_id=$2 AND confirmado_em IS NULL AND expira_em>NOW() AND texto_ocr LIKE 'arquivo:%' ORDER BY id DESC LIMIT 1",
+      [userId, chat],
+    );
+    return r.rows[0] as { id: number; descricao: string; texto_ocr: string } | undefined;
+  }
+  private async chooseMatrix(chat: number, userId: number, id: number, choice: string, text?: string) {
+    const r = await this.scoped(userId).query(
+      "SELECT id,descricao,texto_ocr FROM ocr_pendencias WHERE id=$1 AND usuario_id=$2 AND telegram_id=$3 AND confirmado_em IS NULL AND expira_em>NOW() AND texto_ocr LIKE 'arquivo:%'",
+      [id, userId, chat],
+    );
+    const p = r.rows[0];
+    if (!p) {
+      await this.send(chat, "Essa planilha expirou ou já foi usada. Envie o arquivo de novo.");
+      return;
+    }
+    if (choice === "no") {
+      await this.scoped(userId).query("DELETE FROM ocr_pendencias WHERE id=$1 AND usuario_id=$2", [id, userId]);
+      await this.send(chat, "Ok, planilha descartada. Nada foi registrado.");
+      return;
+    }
+    await this.api("sendChatAction", { chat_id: chat, action: "typing" }).catch(() => {});
+    let m: Matrix | null = null;
+    try {
+      m = findMatrix(await this.fileText(String(p.texto_ocr).slice(8), p.descricao));
+    } catch (error) {
+      console.error("Telegram: falha ao reler planilha", String((error as Error)?.message ?? error));
+    }
+    if (!m) {
+      await this.send(chat, "Não consegui reler a planilha. 😕 Envie o arquivo de novo.");
+      return;
+    }
+    const escolha: "total" | number | undefined = text ? matrixChoice(text, m) : choice === "total" ? "total" : Number(choice);
+    if (escolha === undefined || (escolha !== "total" && !m.months.some((x) => x.month === escolha))) {
+      await this.send(chat, "Essa planilha não tem esse mês. Escolha um dos botões acima.");
+      return;
+    }
+    const rows = rowsFromMatrix(m, escolha);
+    await this.scoped(userId).query("UPDATE ocr_pendencias SET confirmado_em=NOW() WHERE id=$1 AND usuario_id=$2", [id, userId]);
+    if (!rows.length) {
+      await this.send(chat, "Não há valores nessa coluna. 🤔");
+      return;
+    }
+    await this.offerBatch(chat, userId, rows, `${p.descricao} · ${escolha === "total" ? "total do ano" : MONTH_NAMES[escolha]}`);
   }
   // Vários lançamentos (planilha/extrato): resumo + "Importar todos".
   private async offerBatch(chat: number, userId: number, rows: Row[], name: string) {
@@ -486,7 +589,7 @@ export class TelegramService {
   }
   private async pending(userId: number, chat: number): Promise<Pending | null> {
     const r = await this.scoped(userId).query(
-      "SELECT * FROM ocr_pendencias WHERE usuario_id=$1 AND telegram_id=$2 AND confirmado_em IS NULL AND expira_em>NOW() AND (texto_ocr IS NULL OR texto_ocr NOT LIKE 'lote:%') ORDER BY id DESC LIMIT 1",
+      "SELECT * FROM ocr_pendencias WHERE usuario_id=$1 AND telegram_id=$2 AND confirmado_em IS NULL AND expira_em>NOW() AND (texto_ocr IS NULL OR (texto_ocr NOT LIKE 'lote:%' AND texto_ocr NOT LIKE 'arquivo:%')) ORDER BY id DESC LIMIT 1",
       [userId, chat],
     );
     return r.rows[0] ?? null;
@@ -740,6 +843,11 @@ export class TelegramService {
         [undo[1], userId],
       );
       await this.html(chat, r.rows[0] ? `🗑 Apagado: <b>${esc(r.rows[0].descricao)}</b> · ${brl(r.rows[0].valor)}` : "Esse lançamento já não existe.");
+      return;
+    }
+    const mx = data.match(/^mx:(\d+):(total|no|\d{1,2})$/);
+    if (mx) {
+      await this.chooseMatrix(chat, userId, Number(mx[1]), mx[2]);
       return;
     }
     const lote = data.match(/^lote:([0-9a-f]{8}):(ok|no)$/);

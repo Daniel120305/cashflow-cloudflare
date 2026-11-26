@@ -10,7 +10,12 @@ const ORIGIN = "http://localhost:8787";
 const TOKEN = "123:TESTE";
 const aiCalls: any[] = [];
 const falas: string[] = [];
+import { readFileSync, existsSync } from "node:fs";
+// tests/orcamento.md vem de uma planilha real e fica só local (fora do git).
+const ORCAMENTO = new URL("./orcamento.md", import.meta.url);
+const temOrcamento = existsSync(ORCAMENTO);
 const arquivos: Record<string, string> = {
+  ...(temOrcamento ? { "Orçamento Familiar.xlsx": readFileSync(ORCAMENTO, "utf8") } : {}),
   "nota.pdf": "NOTA FISCAL DE SERVIÇO\nPrestador: Mercado Pago\nValor total: R$ 2.100,00\nEmitida em 20/11/2026",
   "extrato.xlsx": "## Planilha1\n\n| Data | Descrição | Valor |\n|---|---|---|\n| 21/11/2026 | Padaria Pão Quente | -12,50 |\n| 22/11/2026 | Pix recebido Maria | 150,00 |\n| 23/11/2026 | Posto Shell | -200,00 |",
 };
@@ -232,6 +237,26 @@ test("vincular pelo código, registrar despesa, /saldo e /extrato", async () => 
   txs = (await call("GET", "/api/transacoes")).data.transactions;
   assert.equal(txs.filter((t: any) => t.description === "Posto Shell").length, 1);
   assert.ok(txs.some((t: any) => t.description === "Pix recebido Maria" && t.type === "income" && t.amount === 150));
+  // Orçamento mensal: pergunta o que importar; escolha por texto e por botão.
+  if (temOrcamento) {
+  const orc = await arquivo("Orçamento Familiar.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  assert.match(orc, /Planilha de orçamento mensal[\s\S]*JAN a DEZ[\s\S]*coluna de total encontrada[\s\S]*O que você quer importar/);
+  const teclado = sent.find((x) => x.body?.reply_markup?.inline_keyboard?.[0]?.[0]?.callback_data?.startsWith("mx:")).body.reply_markup.inline_keyboard;
+  assert.equal(teclado[0][0].text, "🧮 Total do ano");
+  const porTexto = await reply("pega só a última coluna");
+  assert.match(porTexto, /Encontrei 51 lançamentos[\s\S]*total do ano[\s\S]*6 receitas: <b>R\$\s?248\.720,01<\/b>/);
+  const cancelar = sent.find((x) => x.body?.reply_markup?.inline_keyboard?.[0]?.[1]?.callback_data?.startsWith("lote:"));
+  assert.match(await cbk(cancelar.body.reply_markup.inline_keyboard[0][1].callback_data), /cancelada/);
+  await arquivo("Orçamento Familiar.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  const mx = sent.find((x) => x.body?.reply_markup?.inline_keyboard?.[0]?.[0]?.callback_data?.startsWith("mx:")).body.reply_markup.inline_keyboard;
+  const novembro = mx.flat().find((b: any) => b.text === "NOV");
+  assert.match(await cbk(novembro.callback_data), /Encontrei 47 lançamentos[\s\S]*Novembro/);
+  const imp2 = sent.find((x) => x.body?.reply_markup?.inline_keyboard?.[0]?.[0]?.callback_data?.startsWith("lote:"));
+  assert.match(await cbk(imp2.body.reply_markup.inline_keyboard[0][0].callback_data), /47 lançamentos importados/);
+  txs = (await call("GET", "/api/transacoes")).data.transactions;
+  const pjNov = txs.find((t: any) => t.description === "Salário PJ - dia 10");
+  assert.deepEqual([pjNov.date, pjNov.amount, pjNov.type], ["2026-11-10", 7790, "income"]);
+  }
   // Formato não suportado.
   assert.match(await arquivo("video.mp4", "video/mp4"), /Ainda não leio arquivos <b>\.mp4<\/b>/);
   assert.match(await cbk("desvincular:sim"), /desvinculado/);

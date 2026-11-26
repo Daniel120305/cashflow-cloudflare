@@ -65,3 +65,37 @@ test("tipos de arquivo", () => {
   assert.equal(docKind("musica.mp3", "audio/mpeg"), "unsupported");
   assert.equal(docKind("x.zip", "application/zip"), "unsupported");
 });
+
+test("orçamento mensal em grade (planilha real): meses, total, seções e anexo", { skip: !(await import("node:fs")).existsSync(new URL("./orcamento.md", import.meta.url)) && "tests/orcamento.md é local (dados reais, fora do git)" }, async () => {
+  const { readFileSync } = await import("node:fs");
+  const { findMatrix, rowsFromMatrix, matrixChoice } = await import("../src/integrations/documents.js");
+  const m = findMatrix(readFileSync(new URL("./orcamento.md", import.meta.url), "utf8"))!;
+  assert.equal(m.months.length, 12);
+  assert.notEqual(m.totalCol, null); // coluna de total sem título, achada pelos valores
+  const total = rowsFromMatrix(m, "total", HOJE);
+  const soma = (t: string) => Math.round(total.filter((r) => r.type === t).reduce((a, r) => a + Number(r.amount), 0) * 100) / 100;
+  // Renda bate com a "Renda Total" declarada na planilha; o anexo "Renda Bruta" fica de fora.
+  assert.equal(soma("income"), 248720.01);
+  assert.ok(!total.some((r) => /Daniel|Honorários|IRRF/.test(r.description)));
+  // Nada de vencimento como valor, nem linhas de TOTAL/saldo.
+  assert.ok(!total.some((r) => /^(total|renda total|despesas totais|resultado|saldo)/i.test(r.description)));
+  const pj = total.find((r) => r.description === "Salário PJ - dia 10")!;
+  assert.deepEqual([pj.type, pj.category, pj.amount], ["income", "salario", "93321.60"]);
+  const aluguel = total.find((r) => r.description === "Aluguel/Financiamento")!;
+  assert.deepEqual([aluguel.type, aluguel.category, aluguel.amount], ["expense", "moradia", "25000.00"]);
+  assert.equal(total.find((r) => r.description === "Aluguel de Carro")!.category, "lazer"); // seção Férias/Viagens
+  // Linha sem valor na coluna de total ("Claude"): soma dos meses.
+  assert.equal(total.find((r) => r.description === "Claude")!.amount, "1320.00");
+  // Mês: data usa o vencimento.
+  const nov = rowsFromMatrix(m, 11, HOJE);
+  assert.deepEqual(nov.find((r) => r.description === "Salário PJ - dia 10"), { date: "2026-11-10", description: "Salário PJ - dia 10", amount: "7790.00", type: "income", category: "salario" });
+  assert.equal(matrixChoice("pega só a última coluna", m, HOJE), "total");
+  assert.equal(matrixChoice("quero novembro", m, HOJE), 11);
+  assert.equal(matrixChoice("abacaxi", m, HOJE), undefined);
+});
+
+test("lista comum: coluna de dia/vencimento nunca vira valor", async () => {
+  const md = "| Conta | Vencimento | Valor |\n|---|---|---|\n| Luz | 10 | 210,35 |\n| Água | 5 | 80,00 |\n| Internet | 15 | 139,90 |";
+  const rows = rowsFromDocument(md, HOJE);
+  assert.deepEqual(rows.map((r) => [r.description, r.amount]), [["Luz", "210.35"], ["Água", "80.00"], ["Internet", "139.90"]]);
+});
