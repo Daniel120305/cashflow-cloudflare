@@ -11,7 +11,8 @@ const MODEL = "@cf/meta/llama-3.2-11b-vision-instruct";
 const PROMPT =
   "Você recebe a foto de um cupom fiscal, nota fiscal ou comprovante de pagamento brasileiro. " +
   'Responda SOMENTE com um JSON neste formato: {"estabelecimento":"nome da loja","data":"DD/MM/AAAA","total":"123,45"}. ' +
-  "Use o VALOR TOTAL pago (não subtotal, troco nem desconto). Se não achar a data, use null. " +
+  "Use o VALOR TOTAL pago (não subtotal, troco nem desconto). Leia cada dígito com atenção: 1 e 2, 1 e 7, 5 e 6, 0 e 8 se confundem em fotos. " +
+  "A data costuma estar no topo, perto do horário. Se não achar a data, use null. " +
   'Se a imagem não for um comprovante, responda {"erro":"nao_e_comprovante"}.';
 
 type Ai = { run: (model: string, input: any) => Promise<any> };

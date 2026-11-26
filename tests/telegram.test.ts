@@ -9,7 +9,14 @@ import { ensureWebhook, ensureProfile, webhookSecret, COMMANDS } from "../src/in
 const ORIGIN = "http://localhost:8787";
 const TOKEN = "123:TESTE";
 const aiCalls: any[] = [];
-const fakeAi = { run: async (_m: string, input: any) => (aiCalls.push(input), { response: '{"estabelecimento":"Supermercado Bom Preço","data":"20/11/2026","total":"R$ 87,45"}' }) };
+const fakeAi = {
+  run: async (model: string, input: any) => {
+    aiCalls.push(input);
+    // IA de texto (reserva da conversa)
+    if (model.includes("llama-3.1")) return { response: '{"acao":"lancamento","tipo":"despesa","valor":"45","descricao":"farmácia","categoria":"saude","data":"' + new Date().toISOString().slice(0, 10) + '"}' };
+    return { response: '{"estabelecimento":"Shopping Som","data":"24/07/2026","total":"R$ 1.100,00"}' };
+  },
+};
 const env = { NODE_ENV: "development", EMAIL_TOKEN_SECRET: "x", APP_ORIGIN: ORIGIN, TELEGRAM_BOT_TOKEN: TOKEN, TELEGRAM_BOT_USERNAME: "cashflow_pi_bot", AI: fakeAi } as unknown as Env;
 process.env.NODE_ENV = "development"; process.env.APP_ORIGIN = ORIGIN; process.env.EMAIL_TOKEN_SECRET = "x";
 const db = wrapPool(miniPool() as any);
@@ -120,25 +127,46 @@ test("vincular pelo código, registrar despesa, /saldo e /extrato", async () => 
   assert.match(await reply("/categorias"), /Alimentação: <b>R\$\s?30,50<\/b>/);
   assert.match(await reply("/limite"), /ainda não definiu/);
   assert.match(await reply("/dica"), /Dica/);
-  assert.match(await reply("bom dia"), /Não entendi/);
+  assert.match(await reply("bom dia"), /comandos/);
   assert.match(await cbk("cmd:saldo"), /Saldo total/);
   const pergunta = await reply("/desfazer");
   assert.match(pergunta, /salário/);
   const undoId = sent.find((s) => s.method === "sendMessage").body.reply_markup.inline_keyboard[0][0].callback_data;
   assert.match(await cbk(undoId), /Apagado/);
   assert.equal((await call("GET", "/api/transacoes")).data.transactions.length, 1);
-  // Foto do cupom: lê pela IA, pergunta e registra ao confirmar.
+  // Foto do cupom: lê pela IA, pergunta e deixa corrigir antes de registrar.
   sent.length = 0;
   await hook({ update_id: ++upd, message: { message_id: upd, chat: { id: 777, type: "private" }, from: { id: 777, username: "Amanda_Teste" }, photo: [{ file_id: "p1", file_size: 6 }] } });
   const lido = sent.filter((x) => x.method === "sendMessage").map((x) => x.body.text).join("\n");
   assert.match(lido, /Lendo o comprovante/);
-  assert.match(lido, /Supermercado Bom Preço/);
-  assert.match(lido, /R\$\s?87,45/);
-  assert.match(aiCalls.at(-1).messages[0].content[1].image_url.url, /^data:image\/jpeg;base64,/);
-  const ok = sent.find((x) => x.body?.reply_markup?.inline_keyboard?.[0]?.[0]?.callback_data?.startsWith("confirmar:"));
-  assert.match(await cbk(ok.body.reply_markup.inline_keyboard[0][0].callback_data), /Despesa registrada/);
-  const depois = (await call("GET", "/api/transacoes")).data.transactions;
-  assert.ok(depois.some((t: any) => t.description === "Supermercado Bom Preço" && t.amount === 87.45 && t.date === "2026-11-20"));
+  assert.match(lido, /Shopping Som/);
+  assert.match(lido, /R\$\s?1\.100,00/);
+  const card = sent.find((x) => x.body?.reply_markup?.inline_keyboard?.[1]);
+  const editButtons = card.body.reply_markup.inline_keyboard[1].map((b: any) => b.text).join(" ");
+  assert.match(editButtons, /Valor.*Data.*Categoria.*Nome/);
+  // Correção escrita, como a Amanda fez.
+  assert.match(await reply("Só troca para 2.100"), /atualizei[\s\S]*R\$\s?2\.100,00/);
+  // Correção por botões: categoria e data.
+  const pid = card.body.reply_markup.inline_keyboard[0][0].callback_data.split(":")[1];
+  assert.match(await cbk(`editar:cat:${pid}`), /Escolha a categoria/);
+  assert.match(await cbk(`cat:${pid}:lazer`), /Lazer/);
+  assert.match(await cbk(`quando:${pid}:hoje`), /atualizei/);
+  assert.match(await reply("nome Shopping Som Brasília"), /Shopping Som Brasília/);
+  assert.match(await reply("pode registrar"), /Despesa registrada: <b>Shopping Som Brasília<\/b> · R\$\s?2\.100,00/);
+  let txs = (await call("GET", "/api/transacoes")).data.transactions;
+  const shop = txs.find((t: any) => t.description === "Shopping Som Brasília");
+  assert.equal(shop.amount, 2100);
+  assert.equal(shop.category, "lazer");
+  // Linguagem natural e perguntas.
+  assert.match(await reply("gastei 50 no mercado ontem"), /Despesa registrada[\s\S]*Mercado[\s\S]*R\$\s?50,00/);
+  assert.match(await reply("quanto gastei esse mês?"), /Saldo do mês/);
+  assert.match(await reply("oi"), /comandos/);
+  // Reserva: IA de texto entende e pede confirmação.
+  const entendi = await reply("farmácia 45 hoje cedo");
+  assert.match(entendi, /Entendi assim[\s\S]*Farmácia[\s\S]*R\$\s?45,00/);
+  assert.match(await reply("sim"), /Despesa registrada: <b>Farmácia<\/b>/);
+  txs = (await call("GET", "/api/transacoes")).data.transactions;
+  assert.ok(txs.some((t: any) => t.description === "Farmácia" && t.amount === 45 && t.category === "saude"));
   assert.match(await cbk("desvincular:sim"), /desvinculado/);
   // Desconectar pelo site também funciona (com RLS do usuário).
   await call("POST", "/api/telegram", { acao: "gerar", nome_telegram: "Amanda_Teste" });

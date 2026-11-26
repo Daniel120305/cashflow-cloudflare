@@ -3,6 +3,7 @@ import type { Database } from "../db.js";
 import { userDatabase } from "../db.js";
 import { categoryLabel, parseTransaction, brazilToday } from "./receipt.js";
 import { readReceipt } from "./ocr.js";
+import { parseCorrection, parseNatural, intentOf, EXPENSE_CATEGORIES, type Correction, type AiReading } from "./conversa.js";
 type Input = {
   description: string;
   amount: string;
@@ -20,7 +21,15 @@ type Deps = {
   summary: (userId: number, month?: string) => Promise<any>;
   // Endereço do site, para os botões "Abrir o CashFlow".
   siteUrl?: string;
+  // IA de texto (reserva) para mensagens que as regras não entendem.
+  interpret?: (text: string, pending: any) => Promise<AiReading | null>;
 };
+// Pendência (comprovante lido ou lançamento entendido pela IA) esperando o "Registrar".
+// O tipo fica em texto_ocr ("tipo:income"); sem marca, é despesa.
+type Pending = { id: number; descricao: string; valor: string; categoria: string; data_transacao: any; texto_ocr: string | null };
+const pendingDate = (p: Pending) =>
+  p.data_transacao instanceof Date ? p.data_transacao.toISOString().slice(0, 10) : String(p.data_transacao).slice(0, 10);
+const pendingType = (p: Pending) => (p.texto_ocr === "tipo:income" ? "income" : "expense");
 // Texto do usuário dentro de mensagens HTML do Telegram.
 const esc = (s: unknown) =>
   String(s ?? "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!);
@@ -56,10 +65,11 @@ export const HELP_TEXT = [
   "<b>Registrar</b>",
   "• <code>/despesa mercado 35,90</code> — registra uma despesa",
   "• <code>/receita salário 3000</code> — registra uma receita",
-  "• 📷 Foto do cupom fiscal — leio e pergunto se confirmo",
+  "• Ou escreva do seu jeito: <code>gastei 50 no mercado</code>, <code>paguei 120 de luz ontem</code>",
+  "• 📷 Foto do cupom fiscal — leio e você corrige o que precisar (ex.: <code>valor 2.100</code>)",
   "• /desfazer — apaga o último lançamento",
   "",
-  "<b>Consultar</b>",
+  "<b>Consultar</b> (ou pergunte: <i>quanto gastei esse mês?</i>)",
   "• /saldo — saldo total e do mês",
   "• /mes — resumo do mês e comparação com o anterior",
   "• /hoje — lançamentos de hoje",
@@ -190,16 +200,110 @@ export class TelegramService {
       return;
     }
     if (name && (await this.command(chat, userId, name, (cmd![2] ?? "").trim(), update, message))) return;
+    // Há um comprovante esperando confirmação? Texto livre pode ser correção.
+    const pending = name ? null : await this.pending(userId, chat);
+    if (pending) {
+      const corr = parseCorrection(command);
+      if (corr) {
+        await this.applyCorrection(chat, userId, pending, corr);
+        return;
+      }
+    }
     const parsed = parseTransaction(command);
     if (parsed) {
       await this.register(chat, userId, parsed, update, message);
       return;
     }
+    if (!name) {
+      const natural = parseNatural(command);
+      if (natural) {
+        await this.register(chat, userId, natural, update, message);
+        return;
+      }
+      const intent = intentOf(command);
+      if (intent && (await this.command(chat, userId, intent, "", update, message))) return;
+      // Reserva: IA de texto. O que ela entende como lançamento pede confirmação.
+      const reading = await this.deps.interpret?.(command, pending ? { descricao: pending.descricao, valor: String(pending.valor), data: pendingDate(pending), categoria: pending.categoria } : null).catch(() => null);
+      if (reading?.acao === "correcao" && pending) return this.applyCorrection(chat, userId, pending, reading.correcao);
+      if (reading?.acao === "comando" && (await this.command(chat, userId, reading.comando, "", update, message))) return;
+      if (reading?.acao === "lancamento") {
+        const l = reading.lancamento;
+        const r = await this.scoped(userId).query(
+          "INSERT INTO ocr_pendencias(telegram_id,usuario_id,descricao,valor,categoria,data_transacao,texto_ocr,expira_em) VALUES($1,$2,$3,$4,$5,$6,$7,NOW()+INTERVAL '15 minutes') RETURNING *",
+          [chat, userId, l.description, l.amount, l.category, l.date, l.type === "income" ? "tipo:income" : null],
+        );
+        await this.showPending(chat, r.rows[0], "🤖 <b>Entendi assim:</b>");
+        return;
+      }
+      if (pending) {
+        await this.html(chat, "Não entendi a correção. 🤔 Você pode escrever, por exemplo:\n• <code>valor 2.100</code>\n• <code>data hoje</code> ou <code>foi dia 20</code>\n• <code>categoria lazer</code>\n• <code>nome Shopping Som</code>\nOu use os botões do comprovante.");
+        return;
+      }
+      if (reading?.acao === "outro" && reading.resposta) {
+        await this.html(chat, esc(reading.resposta), { reply_markup: MENU });
+        return;
+      }
+    }
     await this.html(
       chat,
-      "Não entendi. 🤔\nExemplos: <code>/despesa mercado 35,90</code> ou <code>/receita salário 3000</code>.\nToque em <b>Menu</b> ou mande /ajuda para ver tudo.",
+      "Não entendi. 🤔\nTente: <code>gastei 50 no mercado</code>, <code>/despesa mercado 35,90</code> ou <code>quanto gastei esse mês?</code>\nToque em <b>Menu</b> ou mande /ajuda para ver tudo.",
       { reply_markup: MENU },
     );
+  }
+  private async pending(userId: number, chat: number): Promise<Pending | null> {
+    const r = await this.scoped(userId).query(
+      "SELECT * FROM ocr_pendencias WHERE usuario_id=$1 AND telegram_id=$2 AND confirmado_em IS NULL AND expira_em>NOW() ORDER BY id DESC LIMIT 1",
+      [userId, chat],
+    );
+    return r.rows[0] ?? null;
+  }
+  private async showPending(chat: number, p: Pending, title = "🧾 <b>Li este comprovante:</b>") {
+    const income = pendingType(p) === "income";
+    await this.html(
+      chat,
+      `${title}\n\n🏪 ${esc(p.descricao)}\n💸 <b>${brl(p.valor)}</b>\n📅 ${pendingDate(p).split("-").reverse().join("/")}\n🏷 ${esc(categoryLabel(p.categoria))}\n\nRegistrar como ${income ? "receita" : "despesa"}?\n<i>Algo errado? Toque para editar ou escreva, ex.: "valor 2.100", "data hoje".</i>`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: "✅ Registrar", callback_data: `confirmar:${p.id}` },
+              { text: "✖️ Cancelar", callback_data: `cancelar:${p.id}` },
+            ],
+            [
+              { text: "✏️ Valor", callback_data: `editar:valor:${p.id}` },
+              { text: "📅 Data", callback_data: `editar:data:${p.id}` },
+              ...(income ? [] : [{ text: "🏷 Categoria", callback_data: `editar:cat:${p.id}` }]),
+              { text: "🏪 Nome", callback_data: `editar:nome:${p.id}` },
+            ],
+          ],
+        },
+      },
+    );
+  }
+  private async applyCorrection(chat: number, userId: number, p: Pending, c: Correction) {
+    if (c.cancelar) return this.confirm(chat, userId, `cancelar:${p.id}`);
+    const sets: string[] = [];
+    const vals: any[] = [];
+    const add = (col: string, v: any) => (vals.push(v), sets.push(`${col}=$${vals.length}`));
+    if (c.valor) add("valor", c.valor);
+    if (c.data) add("data_transacao", c.data);
+    if (c.categoria && pendingType(p) === "expense") add("categoria", c.categoria);
+    if (c.descricao) add("descricao", c.descricao);
+    if (sets.length) {
+      vals.push(p.id, userId, chat);
+      const n = vals.length;
+      const r = await this.scoped(userId).query(
+        `UPDATE ocr_pendencias SET ${sets.join(",")},expira_em=NOW()+INTERVAL '15 minutes' WHERE id=$${n - 2} AND usuario_id=$${n - 1} AND telegram_id=$${n} AND confirmado_em IS NULL RETURNING *`,
+        vals,
+      );
+      if (!r.rows[0]) {
+        await this.send(chat, "Esse comprovante já foi registrado ou expirou.");
+        return;
+      }
+      p = r.rows[0];
+    }
+    if (c.confirmar) return this.confirm(chat, userId, `confirmar:${p.id}`);
+    await this.showPending(chat, p, "✏️ <b>Pronto, atualizei:</b>");
   }
   private async html(chat: number | string, text: string, options: object = {}) {
     await this.send(chat, text, { parse_mode: "HTML", disable_web_page_preview: true, ...options });
@@ -404,6 +508,40 @@ export class TelegramService {
       await this.html(chat, r.rows[0] ? `🗑 Apagado: <b>${esc(r.rows[0].descricao)}</b> · ${brl(r.rows[0].valor)}` : "Esse lançamento já não existe.");
       return;
     }
+    const edit = data.match(/^editar:(valor|data|cat|nome):(\d+)$/);
+    if (edit) {
+      const [, campo, id] = edit;
+      if (campo === "valor") await this.html(chat, "💸 Qual é o valor certo? Mande só o número, ex.: <code>2.100,00</code>");
+      else if (campo === "nome") await this.html(chat, "🏪 Qual é o nome certo? Ex.: <code>nome Shopping Som</code>");
+      else if (campo === "data")
+        await this.html(chat, "📅 Qual é a data? Toque ou mande, ex.: <code>25/11</code>", {
+          reply_markup: { inline_keyboard: [[{ text: "Hoje", callback_data: `quando:${id}:hoje` }, { text: "Ontem", callback_data: `quando:${id}:ontem` }, { text: "Anteontem", callback_data: `quando:${id}:anteontem` }]] },
+        });
+      else {
+        const botoes = EXPENSE_CATEGORIES.map((c) => ({ text: categoryLabel(c), callback_data: `cat:${id}:${c}` }));
+        const linhas = [];
+        for (let i = 0; i < botoes.length; i += 3) linhas.push(botoes.slice(i, i + 3));
+        await this.html(chat, "🏷 Escolha a categoria:", { reply_markup: { inline_keyboard: linhas } });
+      }
+      return;
+    }
+    const quick = data.match(/^(cat|quando):(\d+):([a-z-]+)$/);
+    if (quick) {
+      const p = await this.pending(userId, chat);
+      if (!p || String(p.id) !== quick[2]) {
+        await this.send(chat, "Esse comprovante já foi registrado ou expirou.");
+        return;
+      }
+      const corr: Correction = {};
+      if (quick[1] === "cat" && EXPENSE_CATEGORIES.includes(quick[3])) corr.categoria = quick[3];
+      if (quick[1] === "quando") {
+        const { parseDate } = await import("./conversa.js");
+        const d = parseDate(quick[3]);
+        if (d) corr.data = d;
+      }
+      await this.applyCorrection(chat, userId, p, corr);
+      return;
+    }
     if (data === "desvincular:sim") {
       await this.deps.db.query("DELETE FROM telegram_vinculos WHERE usuario_id=$1 AND telegram_id=$2", [userId, chat]);
       await this.send(chat, "Telegram desvinculado. Para ligar de novo, gere um código no Perfil do site.");
@@ -435,7 +573,7 @@ export class TelegramService {
       description: p.descricao,
       amount: String(p.valor),
       category: p.categoria,
-      type: "expense",
+      type: pendingType(p),
       date:
         p.data_transacao instanceof Date
           ? p.data_transacao.toISOString().slice(0, 10)
@@ -446,7 +584,7 @@ export class TelegramService {
       "UPDATE ocr_pendencias SET confirmado_em=NOW() WHERE id=$1 AND usuario_id=$2 AND telegram_id=$3 AND confirmado_em IS NULL RETURNING id",
       [p.id, userId, chat],
     );
-    await this.html(chat, `✅ Despesa registrada: <b>${esc(p.descricao)}</b> · ${brl(p.valor)}`, {
+    await this.html(chat, `✅ ${pendingType(p) === "income" ? "Receita" : "Despesa"} registrada: <b>${esc(p.descricao)}</b> · ${brl(p.valor)}`, {
       reply_markup: { inline_keyboard: [[{ text: "↩️ Desfazer", callback_data: "cmd:desfazer" }, { text: "💰 Saldo", callback_data: "cmd:saldo" }]] },
     });
   }
@@ -512,7 +650,7 @@ export class TelegramService {
         return;
       }
       const r = await userDatabase(this.deps.db, userId).query(
-        "INSERT INTO ocr_pendencias(telegram_id,usuario_id,descricao,valor,categoria,data_transacao,texto_ocr,expira_em) VALUES($1,$2,$3,$4,$5,$6,NULL,NOW()+INTERVAL '15 minutes') RETURNING id",
+        "INSERT INTO ocr_pendencias(telegram_id,usuario_id,descricao,valor,categoria,data_transacao,texto_ocr,expira_em) VALUES($1,$2,$3,$4,$5,$6,NULL,NOW()+INTERVAL '15 minutes') RETURNING *",
         [
           chat,
           userId,
@@ -522,21 +660,7 @@ export class TelegramService {
           receipt.date,
         ],
       );
-      const id = r.rows[0].id;
-      await this.html(
-        chat,
-        `🧾 <b>Li este comprovante:</b>\n\n🏪 ${esc(receipt.description)}\n💸 <b>${brl(receipt.amount)}</b>\n📅 ${receipt.date.split("-").reverse().join("/")}\n🏷 ${esc(categoryLabel(receipt.category))}\n\nRegistrar como despesa?`,
-        {
-          reply_markup: {
-            inline_keyboard: [
-              [
-                { text: "✅ Registrar", callback_data: `confirmar:${id}` },
-                { text: "✖️ Cancelar", callback_data: `cancelar:${id}` },
-              ],
-            ],
-          },
-        },
-      );
+      await this.showPending(chat, r.rows[0]);
     } catch (error) {
       console.error("Telegram: falha ao ler comprovante", String((error as Error)?.message ?? error));
       await this.send(

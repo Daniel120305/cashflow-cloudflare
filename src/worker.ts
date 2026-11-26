@@ -9,6 +9,7 @@ import { checkEmailDomain } from "./integrations/email-check.js";
 import { googleVerifier } from "./integrations/google.js";
 import { TelegramService } from "./integrations/telegram.js";
 import { workersAiOcr } from "./integrations/ocr.js";
+import { aiTextInterpreter } from "./integrations/conversa.js";
 import { ensureWebhook, ensureProfile, webhookSecret } from "./integrations/telegram-setup.js";
 import { saveTransaction, monthlySummary } from "./services/finance.js";
 import { drainQueues, cleanup } from "./services/queues.js";
@@ -69,6 +70,7 @@ const telegramFor = (db: Database, env: Env) =>
         record: (uid, input) => saveTransaction(db, uid, input),
         summary: (uid, month) => monthlySummary(db, uid, month),
         siteUrl: env.APP_ORIGIN,
+        interpret: aiTextInterpreter(env.AI),
       })
     : undefined;
 
