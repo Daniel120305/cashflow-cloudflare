@@ -80,6 +80,19 @@ function csvTable(text: string): string[][] {
 const pct = (col: string[], test: (v: string) => boolean) => (col.length ? col.filter(test).length / col.length : 0);
 
 // Acha colunas de data, valor (ou débito/crédito) e descrição e monta os lançamentos.
+// Palavras que indicam dinheiro que ENTRA (quando a planilha não diz o tipo).
+const INCOME_WORDS = /\b(salario|salarios|freela|freelas|freelance|freelancer|renda|rendas|receita|receitas|rendimento|rendimentos|dividendo|dividendos|bonus|bonificacao|plr|13o|13º|decimo terceiro|pro labore|prolabore|comissao|comissoes|reembolso|restituicao|beneficio|beneficios|vale|vales|vr|va|auxilio|bolsa|mesada recebida|pensao recebida|aluguel recebido|venda|vendas|cashback|premio|premios|ganho|ganhos|entrada|entradas|deposito|pix recebido|transferencia recebida|ted recebida|honorarios recebidos|faturamento|provento|proventos|juros recebidos)\b/;
+const TYPE_VALUE = /^(receitas?|despesas?|entradas?|saidas?|creditos?|debitos?|rendas?|gastos?|ganhos?|custos?|income|expense)\b|^(c|d|in|out)$/;
+const isIncomeType = (t: string) => /^(receita|entrada|credito|c$|renda|ganho|income|in$)/.test(t);
+export const incomeCategory = (text: string) => {
+  const n = norm(text);
+  return /salario|pro ?labore|folha/.test(n) ? "salario" : /freela|\bpj\b/.test(n) ? "freelance" : /invest|rendiment|dividend|juros|provento/.test(n) ? "investimentos" : "outros-receitas";
+};
+export function looksLikeIncome(text: string) {
+  const n = norm(text);
+  return INCOME_WORDS.test(n) && !/\b(pagamento de|pago a|para pagar)\b/.test(n);
+}
+
 export function rowsFromTable(table: string[][], today = brazilToday()): Row[] {
   if (table.length < 2) return [];
   // O cabeçalho pode não ser a primeira linha (títulos acima da tabela).
@@ -113,6 +126,14 @@ export function rowsFromTable(table: string[][], today = brazilToday()): Row[] {
     else if (amountCol < 0 && isMoney && (/valor|value|amount|montante|total|quantia|r\$/.test(h) || !h)) amountCol = i;
     else if (/^(tipo|natureza|d\/c|dc|operacao)$/.test(h)) typeCol = i;
   }
+  if (typeCol < 0)
+    for (let i = 0; i < cols; i++) {
+      const vals = column(i);
+      if (vals.length >= 2 && pct(vals, (v) => TYPE_VALUE.test(norm(v))) >= 0.8) {
+        typeCol = i;
+        break;
+      }
+    }
   if (amountCol < 0 && debitCol < 0 && creditCol < 0) {
     // Sem cabeçalho de valor: primeira coluna numérica que não é data nem saldo.
     for (let i = 0; i < cols; i++)
@@ -135,22 +156,33 @@ export function rowsFromTable(table: string[][], today = brazilToday()): Row[] {
   }
   if (amountCol < 0 && debitCol < 0 && creditCol < 0) return [];
   const rows: Row[] = [];
+  const onlyPositive = amountCol >= 0 && debitCol < 0 && creditCol < 0 && !body.some((x) => (signedMoney(x[amountCol] ?? "") ?? 0) < 0);
+  // Títulos de seção ("RECEITAS", "Despesas fixas") valem para as linhas abaixo.
+  let section: "income" | "expense" | undefined;
+  const moneyCols = [amountCol, debitCol, creditCol].filter((i) => i >= 0);
   for (const r of body) {
     const desc = (descCol >= 0 ? r[descCol] : "") || "";
-    if (/^saldo\b|saldo (anterior|do dia|final|disponivel)|^total\b/i.test(norm(desc))) continue;
+    const text = r.filter((c, i) => c && !moneyCols.includes(i) && i !== dateCol).join(" ");
+    const nt = norm(text);
+    if (moneyCols.every((i) => signedMoney(r[i] ?? "") === undefined)) {
+      if (/\b(receitas?|rendas?|entradas?|ganhos?|creditos?|proventos)\b/.test(nt) && !/\b(despesas?|gastos?|saidas?)\b/.test(nt)) section = "income";
+      else if (/\b(despesas?|gastos?|saidas?|custos?|debitos?|contas?)\b/.test(nt)) section = "expense";
+      continue;
+    }
+    if (/^saldo\b|saldo (anterior|do dia|final|disponivel)|^(total|subtotal|resultado|sobra|balanco)\b/i.test(norm(desc)) || /^(total|subtotal)\b/.test(nt)) continue;
     let value: number | undefined;
     if (debitCol >= 0 && signedMoney(r[debitCol] ?? "") !== undefined) value = -Math.abs(signedMoney(r[debitCol])!);
     else if (creditCol >= 0 && signedMoney(r[creditCol] ?? "") !== undefined) value = Math.abs(signedMoney(r[creditCol])!);
     else if (amountCol >= 0) value = signedMoney(r[amountCol] ?? "");
     if (value === undefined) continue;
     let type: "income" | "expense" = value < 0 ? "expense" : "income";
-    if (typeCol >= 0) {
-      const t = norm(r[typeCol] ?? "");
-      if (/^(d|debito|saida|despesa|gasto)/.test(t)) type = "expense";
-      else if (/^(c|credito|entrada|receita)/.test(t)) type = "income";
-    } else if (amountCol >= 0 && debitCol < 0 && creditCol < 0 && !body.some((x) => (signedMoney(x[amountCol] ?? "") ?? 0) < 0)) {
-      // Planilha só com valores positivos e sem coluna de tipo: são gastos.
-      type = "expense";
+    const t = typeCol >= 0 ? norm(r[typeCol] ?? "") : "";
+    if (typeCol >= 0 && TYPE_VALUE.test(t)) type = isIncomeType(t) ? "income" : "expense";
+    else if (onlyPositive) {
+      // Só valores positivos: seção da planilha > palavras da linha > despesa.
+      if (section) type = section;
+      else if (looksLikeIncome(text)) type = "income";
+      else type = "expense";
     }
     const date = (dateCol >= 0 ? sheetDate(r[dateCol] ?? "") : undefined) ?? today;
     const description = (desc.replace(/\s+/g, " ").trim().slice(0, 120)) || (type === "income" ? "Receita" : "Despesa");
@@ -158,7 +190,7 @@ export function rowsFromTable(table: string[][], today = brazilToday()): Row[] {
     if (Number(amount) > 9_999_999_999.99) continue;
     const category =
       type === "income"
-        ? /salario|salário|pagamento|folha/i.test(description) ? "salario" : /pix recebido|transferencia recebida|ted recebida/i.test(description) ? "outros-receitas" : "outros-receitas"
+        ? incomeCategory(text)
         : categoryFrom(description) ?? classifyExpense(description);
     rows.push({ date, description, amount, type, category });
   }
@@ -388,7 +420,7 @@ export function findMatrix(md: string): Matrix | null {
       });
       const total = totalCol !== null ? num(r[totalCol]) : undefined;
       const dueRaw = dueCol !== null ? (r[dueCol] ?? "").match(/\b([12]?\d|3[01])\b/)?.[1] : undefined;
-      const itemType = !seenSection && INCOME_SECTION.test(nl) ? "income" : type;
+      const itemType = !seenSection && (INCOME_SECTION.test(nl) || looksLikeIncome(label)) ? "income" : type;
       const category =
         itemType === "income"
           ? /salario/.test(nl) ? "salario" : /freela|pj\b/.test(nl) ? "freelance" : /invest|rendiment|dividend/.test(nl) ? "investimentos" : "outros-receitas"

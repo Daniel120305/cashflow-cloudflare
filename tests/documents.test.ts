@@ -99,3 +99,19 @@ test("lista comum: coluna de dia/vencimento nunca vira valor", async () => {
   const rows = rowsFromDocument(md, HOJE);
   assert.deepEqual(rows.map((r) => [r.description, r.amount]), [["Luz", "210.35"], ["Água", "80.00"], ["Internet", "139.90"]]);
 });
+
+test("receitas x despesas sem sinal: palavras, seções e coluna de tipo", () => {
+  const tipos = (md: string) => rowsFromDocument(md, HOJE).map((r) => `${r.type === "income" ? "+" : "-"}${r.description}:${r.category}`);
+  assert.deepEqual(
+    tipos("| Item | Valor |\n|---|---|\n| Salário | 6500 |\n| Freelance | 800 |\n| Vale/benefício | 500 |\n| Aluguel | 1800 |\n| Energia elétrica | 180 |"),
+    ["+Salário:salario", "+Freelance:freelance", "+Vale/benefício:outros-receitas", "-Aluguel:moradia", "-Energia elétrica:moradia"],
+  );
+  assert.deepEqual(
+    tipos("| Descrição | Valor |\n|---|---|\n| RECEITAS | |\n| Salário | 6500 |\n| Outros | 300 |\n| DESPESAS FIXAS | |\n| Aluguel | 1800 |\n| Outros | 50 |\n| Total | 8650 |"),
+    ["+Salário:salario", "+Outros:outros-receitas", "-Aluguel:moradia", "-Outros:outros-despesas"],
+  );
+  assert.deepEqual(
+    tipos("| Categoria | Descrição | Valor (R$) |\n|---|---|---|\n| Receita | Bico | 300 |\n| Despesa fixa | Aluguel | 1800 |\n| Despesa variável | Mercado | 900 |"),
+    ["+Bico:outros-receitas", "-Aluguel:moradia", "-Mercado:alimentacao"],
+  );
+});
