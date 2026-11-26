@@ -24,7 +24,7 @@ type Deps = {
   // IA de texto (reserva) para mensagens que as regras não entendem.
   interpret?: (text: string, pending: any) => Promise<AiReading | null>;
   // Transcrição de áudio (Whisper no Workers AI).
-  transcribe?: (audio: Uint8Array) => Promise<string>;
+  transcribe?: (audio: Uint8Array, durationSec?: number) => Promise<string>;
 };
 // Pendência (comprovante lido ou lançamento entendido pela IA) esperando o "Registrar".
 // O tipo fica em texto_ocr ("tipo:income"); sem marca, é despesa.
@@ -310,7 +310,7 @@ export class TelegramService {
     let text = "";
     try {
       const bytes = await this.download(audio.file_id, 5 * 1024 * 1024, /^(voice|music|audio|documents)\/[\w.\/-]+$/);
-      text = (await this.deps.transcribe(bytes)).trim();
+      text = (await this.deps.transcribe(bytes, Number(audio.duration) || 0)).trim();
       bytes.fill(0);
     } catch (error) {
       console.error("Telegram: falha ao transcrever áudio", String((error as Error)?.message ?? error));
@@ -318,10 +318,10 @@ export class TelegramService {
       return;
     }
     if (!text) {
-      await this.send(chat, "Não ouvi nada no áudio. 🤔 Tente falar mais perto do microfone.");
+      await this.send(chat, "🎙️ Não ouvi nada nesse áudio. Confira se o microfone está ligado e tente de novo, falando perto do celular. Ex.: \"gastei 50 reais no mercado\".");
       return;
     }
-    await this.html(chat, `🎙️ <i>“${esc(text)}”</i>`);
+    await this.html(chat, `🎙️ <i>“${esc(text.length > 300 ? text.slice(0, 300) + "…" : text)}”</i>`);
     const clean = wordsToNumbers(text.replace(/^[\s"“”']+|[\s"“”'.!?]+$/g, ""));
     await this.handleText(chat, userId, clean, update, message, true);
   }

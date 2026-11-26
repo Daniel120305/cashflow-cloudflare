@@ -43,3 +43,19 @@ test("áudio: se o Whisper turbo falha, usa o outro modelo", async () => {
   assert.deepEqual(calls, ["@cf/openai/whisper-large-v3-turbo", "@cf/openai/whisper"]);
   await assert.rejects(workersAiTranscriber({ run: async () => { throw new Error("x"); } })!(new Uint8Array([1])), /whisper-turbo: x \| whisper: x/);
 });
+
+test("áudio mudo: alucinações do Whisper são descartadas", async () => {
+  const { looksLikeNoise, workersAiTranscriber } = await import("../src/integrations/audio.js");
+  const mudo = "Thank you very much. ".repeat(40) + "I'm sorry, ".repeat(80);
+  assert.equal(looksLikeNoise(mudo, 3), true);
+  assert.equal(looksLikeNoise("Thank you.", 2), true);
+  assert.equal(looksLikeNoise("Obrigado por assistir!", 2), true);
+  assert.equal(looksLikeNoise("Legendas pela comunidade Amara.org", 4), true);
+  assert.equal(looksLikeNoise("...", 2), true);
+  assert.equal(looksLikeNoise("Gastei 50 reais no Uber ontem.", 3), false);
+  assert.equal(looksLikeNoise("Recebi dois mil e cem de salário, obrigado.", 4), false);
+  assert.equal(looksLikeNoise("Gastei 50 no mercado", 3, { segments: [{ no_speech_prob: 0.9 }] }), true);
+  // O transcritor devolve vazio, e o bot responde "Não ouvi nada".
+  const ai = { run: async () => ({ text: mudo }) };
+  assert.equal(await workersAiTranscriber(ai)!(new Uint8Array([1]), 3), "");
+});

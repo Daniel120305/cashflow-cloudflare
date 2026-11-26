@@ -190,6 +190,10 @@ test("vincular pelo código, registrar despesa, /saldo e /extrato", async () => 
   assert.match(botao.body.reply_markup.inline_keyboard[0][0].text, /Uber · R\$\s?60,00/);
   assert.match(await cbk(botao.body.reply_markup.inline_keyboard[0][0].callback_data), /Apagado: <b>Uber<\/b>/);
   assert.match(await reply("apaga a despesa do abacaxi"), /Não achei/);
+  // Microfone mutado: o Whisper "alucina" e o bot avisa que não ouviu nada.
+  const mudo = await audio("Thank you very much. ".repeat(30) + "I'm sorry, ".repeat(60));
+  assert.match(mudo, /Não ouvi nada/);
+  assert.doesNotMatch(mudo, /Thank you|Não entendi/);
   // Áudio longo demais é recusado com orientação.
   sent.length = 0;
   await hook({ update_id: ++upd, message: { message_id: upd, chat: { id: 777, type: "private" }, from: { id: 777, username: "Amanda_Teste" }, voice: { file_id: "voz" + upd, duration: 300, file_size: 900000 } } });
