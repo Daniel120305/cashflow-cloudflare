@@ -353,13 +353,26 @@ export class TelegramService {
     await this.html(chat, `📄 Lendo <b>${esc(name.length > 40 ? name.slice(0, 37) + "…" : name)}</b>, só um instante…`).catch(() => {});
     await this.api("sendChatAction", { chat_id: chat, action: "typing" }).catch(() => {});
     let text = "";
+    let bytes: Uint8Array;
     try {
-      const bytes = await this.download(doc.file_id, 5 * 1024 * 1024, /^(documents|photos)\/[\w.\/-]+$/);
-      text = await this.deps.toMarkdown(name, bytes);
-      bytes.fill(0);
+      bytes = await this.download(doc.file_id, 5 * 1024 * 1024, /^(documents|photos)\/[\w.\/-]+$/);
     } catch (error) {
-      console.error("Telegram: falha ao converter arquivo", name, String((error as Error)?.message ?? error));
-      await this.send(chat, "Não consegui abrir esse arquivo. 😕 Se for PDF com senha ou planilha protegida, tire a proteção e envie de novo.");
+      console.error("Telegram: falha ao baixar arquivo", name, String((error as Error)?.message ?? error));
+      await this.send(chat, "Não consegui baixar esse arquivo do Telegram. 😕 Tente enviar de novo.");
+      return;
+    }
+    try {
+      text = await this.deps.toMarkdown(name, bytes);
+    } catch (error) {
+      console.error("Telegram: falha ao converter arquivo", name, bytes.length, String((error as Error)?.message ?? error));
+      await this.send(chat, "Não consegui ler o conteúdo desse arquivo. 😕 Se for um comprovante, mande uma foto ou um print dele que eu leio.");
+      return;
+    } finally {
+      bytes.fill(0);
+    }
+    if (!text.trim()) {
+      // PDF escaneado (só imagem) não tem texto para converter.
+      await this.send(chat, "Esse PDF parece ser só uma imagem escaneada, sem texto. 📷 Mande uma foto ou um print dele que eu leio.");
       return;
     }
     // 1) Planilhas/extratos: tabela lida por regras.

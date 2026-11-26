@@ -66,6 +66,25 @@ const syncProfile = (env: Env, force = false) =>
       )
     : Promise.resolve("sem token");
 
+// Tipo do arquivo pela extensão (ajuda o conversor a identificar o formato).
+const MIMES: Record<string, string> = {
+  pdf: "application/pdf",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  xlsm: "application/vnd.ms-excel.sheet.macroenabled.12",
+  xlsb: "application/vnd.ms-excel.sheet.binary.macroenabled.12",
+  xls: "application/vnd.ms-excel",
+  ods: "application/vnd.oasis.opendocument.spreadsheet",
+  odt: "application/vnd.oasis.opendocument.text",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  csv: "text/csv",
+  numbers: "application/vnd.apple.numbers",
+  html: "text/html",
+  htm: "text/html",
+  xml: "application/xml",
+  txt: "text/plain",
+};
+const mimeOf = (name: string) => MIMES[name.toLowerCase().split(".").pop() ?? ""] ?? "application/octet-stream";
+
 const telegramFor = (db: Database, env: Env) =>
   env.TELEGRAM_BOT_TOKEN
     ? new TelegramService({
@@ -80,7 +99,14 @@ const telegramFor = (db: Database, env: Env) =>
         // Arquivo -> Markdown (PDF, Excel, CSV, Word...) pelo Workers AI.
         toMarkdown: env.AI?.toMarkdown
           ? async (name: string, bytes: Uint8Array) => {
-              const r = await env.AI!.toMarkdown!({ name, blob: new Blob([bytes as Uint8Array<ArrayBuffer>]) });
+              const blob = new Blob([bytes as Uint8Array<ArrayBuffer>], { type: mimeOf(name) });
+              let r: any;
+              try {
+                // Forma em lista: aceita por todas as versões da API.
+                r = await (env.AI!.toMarkdown as any)([{ name, blob }]);
+              } catch {
+                r = await env.AI!.toMarkdown!({ name, blob });
+              }
               const one = Array.isArray(r) ? r[0] : r;
               if (!one || one.format === "error") throw new Error(one?.error ?? "conversão falhou");
               return String(one.data ?? "");

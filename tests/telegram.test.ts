@@ -15,7 +15,11 @@ const arquivos: Record<string, string> = {
   "extrato.xlsx": "## Planilha1\n\n| Data | Descrição | Valor |\n|---|---|---|\n| 21/11/2026 | Padaria Pão Quente | -12,50 |\n| 22/11/2026 | Pix recebido Maria | 150,00 |\n| 23/11/2026 | Posto Shell | -200,00 |",
 };
 const fakeAi = {
-  toMarkdown: async (f: { name: string }) => ({ name: f.name, format: "markdown", data: arquivos[f.name] ?? "" }),
+  // Como a API real: aceita um arquivo ou uma lista (e devolve lista).
+  toMarkdown: async (f: any) => {
+    const conv = (x: { name: string; blob: Blob }) => ({ name: x.name, mimetype: x.blob.type, format: "markdown", data: arquivos[x.name] ?? "" });
+    return Array.isArray(f) ? f.map(conv) : conv(f);
+  },
   run: async (model: string, input: any) => {
     aiCalls.push(input);
     // IA de documentos (PDF sem tabela).
