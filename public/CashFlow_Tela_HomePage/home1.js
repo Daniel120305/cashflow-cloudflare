@@ -591,9 +591,8 @@ class FinanceManager {
         }
 
         const container = document.querySelector('.chart-container');
-        const canvas = document.getElementById('categoryChart');
-
-        if (!container || !canvas) return;
+        // O canvas some quando mostramos o estado vazio; é recriado abaixo.
+        if (!container) return;
 
         if (labels.length === 0) {
             container.style.height = '320px';
