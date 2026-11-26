@@ -34,3 +34,12 @@ test("leitura do comprovante: JSON do modelo, data inválida/futura e texto puro
   assert.equal(readReceipt('{"erro":"nao_e_comprovante"}'), null);
   assert.equal(readReceipt("SUPERMERCADO BOM PRECO\n10/11/2026\nTOTAL R$ 45,90")?.amount, "45.90");
 });
+
+test("áudio: se o Whisper turbo falha, usa o outro modelo", async () => {
+  const { workersAiTranscriber } = await import("../src/integrations/audio.js");
+  const calls: string[] = [];
+  const ai = { run: async (model: string) => { calls.push(model); if (model.includes("turbo")) throw new Error("3010: formato"); return { text: " gastei 10 no uber " }; } };
+  assert.equal(await workersAiTranscriber(ai)!(new Uint8Array([1, 2, 3])), "gastei 10 no uber");
+  assert.deepEqual(calls, ["@cf/openai/whisper-large-v3-turbo", "@cf/openai/whisper"]);
+  await assert.rejects(workersAiTranscriber({ run: async () => { throw new Error("x"); } })!(new Uint8Array([1])), /whisper-turbo: x \| whisper: x/);
+});

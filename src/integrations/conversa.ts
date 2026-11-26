@@ -253,3 +253,93 @@ export function aiTextInterpreter(ai: Ai | undefined) {
     return null;
   };
 }
+
+// ---------- Números falados ----------
+// Converte "cinquenta reais", "mil e duzentos", "trinta e cinco e noventa"
+// (35,90) e "dois mil e cem reais e cinquenta centavos" em algarismos.
+// Usado principalmente nas transcrições de áudio.
+const UNIDADES: Record<string, number> = {
+  zero: 0, um: 1, uma: 1, dois: 2, duas: 2, tres: 3, quatro: 4, cinco: 5, seis: 6, sete: 7, oito: 8, nove: 9,
+  dez: 10, onze: 11, doze: 12, treze: 13, catorze: 14, quatorze: 14, quinze: 15, dezesseis: 16, dezessete: 17,
+  dezoito: 18, dezenove: 19, vinte: 20, trinta: 30, quarenta: 40, cinquenta: 50, sessenta: 60, setenta: 70,
+  oitenta: 80, noventa: 90, cem: 100, cento: 100, duzentos: 200, duzentas: 200, trezentos: 300, trezentas: 300,
+  quatrocentos: 400, quatrocentas: 400, quinhentos: 500, quinhentas: 500, seiscentos: 600, seiscentas: 600,
+  setecentos: 700, setecentas: 700, oitocentos: 800, oitocentas: 800, novecentos: 900, novecentas: 900,
+};
+const fold = (w: string) => w.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const isNumWord = (w: string) => fold(w) in UNIDADES || /^(mil|milhao|milhoes)$/.test(fold(w));
+
+function wordsValue(words: string[]): number {
+  let total = 0, grupo = 0;
+  for (const w of words.map(fold)) {
+    if (w === "e") continue;
+    if (w === "mil") (total += (grupo || 1) * 1000), (grupo = 0);
+    else if (w === "milhao" || w === "milhoes") (total += (grupo || 1) * 1_000_000), (grupo = 0);
+    else grupo += UNIDADES[w] ?? 0;
+  }
+  return total + grupo;
+}
+
+export function wordsToNumbers(text: string): string {
+  const words = text.split(/\s+/).filter(Boolean);
+  const out: string[] = [];
+  let i = 0;
+  while (i < words.length) {
+    if (!isNumWord(words[i])) {
+      out.push(words[i++]);
+      continue;
+    }
+    // Lê um número: valores decrescentes ("cento e vinte e cinco"); um valor
+    // maior ou igual ao último somado começa outro número ("trinta e cinco e noventa").
+    const run: string[] = [];
+    let last = Infinity;
+    let j = i;
+    while (j < words.length) {
+      const w = fold(words[j]);
+      if (w === "e" && j + 1 < words.length && isNumWord(words[j + 1]) && run.length) {
+        const next = fold(words[j + 1]);
+        const v = UNIDADES[next];
+        if (v !== undefined && v >= last) break;
+        run.push(words[j]);
+        j++;
+        continue;
+      }
+      if (!isNumWord(words[j])) break;
+      if (w === "mil" || w === "milhao" || w === "milhoes") last = Infinity;
+      else {
+        const v = UNIDADES[w];
+        if (run.length && v >= last) break;
+        last = v;
+      }
+      run.push(words[j]);
+      j++;
+    }
+    // "um"/"uma" soltos são artigo ("um café"), não número.
+    if (run.length === 1 && /^(um|uma)$/.test(fold(run[0]))) {
+      out.push(words[i++]);
+      continue;
+    }
+    out.push(String(wordsValue(run)));
+    i = j;
+  }
+  return out
+    .join(" ")
+    // "50 reais e 90 centavos" -> "50,90"
+    .replace(/\b(\d+)\s*(?:reais|real)?\s*e\s*(\d{1,2})\s*centavos?\b/gi, (_m, a, c) => `${a},${String(c).padStart(2, "0")}`)
+    .replace(/\b(\d+)\s+(?:reais\s+)?com\s+(\d{1,2})\b/gi, "$1,$2")
+    // "35 e 90" -> "35,90" (dois números falados em sequência = reais e centavos)
+    .replace(/\b(\d{1,4}) e (\d{2})\b(?!\s*(?:reais|real|mil))/gi, "$1,$2")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+// "apaga a despesa do mercado", "remover o uber de ontem" -> termo de busca.
+// "apaga o último" fica com o /desfazer.
+export function parseDelete(text: string): string | undefined {
+  const t = norm(text).replace(/[.!?]+$/, "");
+  const m = t.match(/^(?:pode )?(?:apag(?:a|ar|ue)|remov(?:e|er|a)|exclu(?:i|ir|a)|delet(?:a|ar|e)|tir(?:a|ar|e)|cancel(?:a|ar|e))\s+(?:(?:a|o|as|os|aquela|aquele|essa|esse)\s+)?(?:(?:despesa|receita|lancamento|gasto|transacao|compra)s?\s+)?(?:(?:d[aeo]s?|com|n[ao]s?|em)\s+)?(.{2,60})$/);
+  if (!m) return undefined;
+  const termo = m[1].replace(/\b(de )?(hoje|ontem|anteontem)\b/g, "").trim();
+  if (!termo || /^(ultim[oa]|ultimo lancamento|ultima despesa|ultima receita)$/.test(termo)) return undefined;
+  return termo;
+}

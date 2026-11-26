@@ -3,7 +3,7 @@ import type { Database } from "../db.js";
 import { userDatabase } from "../db.js";
 import { categoryLabel, parseTransaction, brazilToday } from "./receipt.js";
 import { readReceipt } from "./ocr.js";
-import { parseCorrection, parseNatural, intentOf, EXPENSE_CATEGORIES, type Correction, type AiReading } from "./conversa.js";
+import { parseCorrection, parseNatural, intentOf, parseDelete, wordsToNumbers, EXPENSE_CATEGORIES, type Correction, type AiReading } from "./conversa.js";
 type Input = {
   description: string;
   amount: string;
@@ -23,6 +23,8 @@ type Deps = {
   siteUrl?: string;
   // IA de texto (reserva) para mensagens que as regras não entendem.
   interpret?: (text: string, pending: any) => Promise<AiReading | null>;
+  // Transcrição de áudio (Whisper no Workers AI).
+  transcribe?: (audio: Uint8Array) => Promise<string>;
 };
 // Pendência (comprovante lido ou lançamento entendido pela IA) esperando o "Registrar".
 // O tipo fica em texto_ocr ("tipo:income"); sem marca, é despesa.
@@ -67,7 +69,9 @@ export const HELP_TEXT = [
   "• <code>/receita salário 3000</code> — registra uma receita",
   "• Ou escreva do seu jeito: <code>gastei 50 no mercado</code>, <code>paguei 120 de luz ontem</code>",
   "• 📷 Foto do cupom fiscal — leio e você corrige o que precisar (ex.: <code>valor 2.100</code>)",
+  "• 🎙️ Áudio — fale \"gastei cinquenta no mercado\" e confirme",
   "• /desfazer — apaga o último lançamento",
+  "• <code>apaga a despesa do mercado</code> — procura e apaga (também por áudio)",
   "",
   "<b>Consultar</b> (ou pergunte: <i>quanto gastei esse mês?</i>)",
   "• /saldo — saldo total e do mês",
@@ -199,6 +203,17 @@ export class TelegramService {
       await this.photo(chat, userId, message.photo.at(-1));
       return;
     }
+    if (message.voice || message.audio) {
+      await this.voice(chat, userId, message.voice ?? message.audio, update, message);
+      return;
+    }
+    await this.handleText(chat, userId, command, update, message);
+  }
+  // Texto escrito ou transcrito de áudio. No áudio (voice=true), lançamentos
+  // sempre pedem confirmação: a transcrição pode ouvir um número errado.
+  private async handleText(chat: number, userId: number, command: string, update: any, message: any, voice = false) {
+    const cmd = command.match(/^\/([a-z_]+)(?:@\w+)?(?:\s+([\s\S]*))?$/i);
+    const name = cmd?.[1]?.toLowerCase();
     if (name && (await this.command(chat, userId, name, (cmd![2] ?? "").trim(), update, message))) return;
     // Há um comprovante esperando confirmação? Texto livre pode ser correção.
     const pending = name ? null : await this.pending(userId, chat);
@@ -211,12 +226,19 @@ export class TelegramService {
     }
     const parsed = parseTransaction(command);
     if (parsed) {
+      if (voice) return this.propose(chat, userId, { ...parsed, type: parsed.type as "income" | "expense" }, "🎙️ <b>Entendi assim:</b>");
       await this.register(chat, userId, parsed, update, message);
       return;
     }
     if (!name) {
+      const termo = parseDelete(command);
+      if (termo) {
+        await this.findToDelete(chat, userId, termo);
+        return;
+      }
       const natural = parseNatural(command);
       if (natural) {
+        if (voice) return this.propose(chat, userId, natural, "🎙️ <b>Entendi assim:</b>");
         await this.register(chat, userId, natural, update, message);
         return;
       }
@@ -226,15 +248,7 @@ export class TelegramService {
       const reading = await this.deps.interpret?.(command, pending ? { descricao: pending.descricao, valor: String(pending.valor), data: pendingDate(pending), categoria: pending.categoria } : null).catch(() => null);
       if (reading?.acao === "correcao" && pending) return this.applyCorrection(chat, userId, pending, reading.correcao);
       if (reading?.acao === "comando" && (await this.command(chat, userId, reading.comando, "", update, message))) return;
-      if (reading?.acao === "lancamento") {
-        const l = reading.lancamento;
-        const r = await this.scoped(userId).query(
-          "INSERT INTO ocr_pendencias(telegram_id,usuario_id,descricao,valor,categoria,data_transacao,texto_ocr,expira_em) VALUES($1,$2,$3,$4,$5,$6,$7,NOW()+INTERVAL '15 minutes') RETURNING *",
-          [chat, userId, l.description, l.amount, l.category, l.date, l.type === "income" ? "tipo:income" : null],
-        );
-        await this.showPending(chat, r.rows[0], "🤖 <b>Entendi assim:</b>");
-        return;
-      }
+      if (reading?.acao === "lancamento") return this.propose(chat, userId, reading.lancamento, voice ? "🎙️ <b>Entendi assim:</b>" : "🤖 <b>Entendi assim:</b>");
       if (pending) {
         await this.html(chat, "Não entendi a correção. 🤔 Você pode escrever, por exemplo:\n• <code>valor 2.100</code>\n• <code>data hoje</code> ou <code>foi dia 20</code>\n• <code>categoria lazer</code>\n• <code>nome Shopping Som</code>\nOu use os botões do comprovante.");
         return;
@@ -249,6 +263,67 @@ export class TelegramService {
       "Não entendi. 🤔\nTente: <code>gastei 50 no mercado</code>, <code>/despesa mercado 35,90</code> ou <code>quanto gastei esse mês?</code>\nToque em <b>Menu</b> ou mande /ajuda para ver tudo.",
       { reply_markup: MENU },
     );
+  }
+  // Lançamento proposto (áudio ou IA): fica pendente até o "Registrar".
+  private async propose(chat: number, userId: number, l: { type: "income" | "expense"; amount: string; description: string; category: string; date: string }, title: string) {
+    const r = await this.scoped(userId).query(
+      "INSERT INTO ocr_pendencias(telegram_id,usuario_id,descricao,valor,categoria,data_transacao,texto_ocr,expira_em) VALUES($1,$2,$3,$4,$5,$6,$7,NOW()+INTERVAL '15 minutes') RETURNING *",
+      [chat, userId, l.description, l.amount, l.category, l.date, l.type === "income" ? "tipo:income" : null],
+    );
+    await this.showPending(chat, r.rows[0], title);
+  }
+  // "apaga a despesa do mercado": acha o lançamento mais recente e pede confirmação.
+  private async findToDelete(chat: number, userId: number, termo: string) {
+    const r = await this.scoped(userId).query(
+      "SELECT id,descricao,valor,tipo,to_char(data_transacao,'DD/MM/YYYY') AS data FROM transacoes WHERE usuario_id=$1 AND (translate(lower(descricao),'áàâãéêíóôõúç','aaaaeeiooouc') LIKE '%'||$2||'%' OR lower(categoria) LIKE '%'||$2||'%') ORDER BY data_transacao DESC,id DESC LIMIT 3",
+      [userId, termo.replace(/[%_\\]/g, "")],
+    );
+    if (!r.rows.length) {
+      await this.html(chat, `Não achei lançamento com "<b>${esc(termo)}</b>". 🤔\nVeja os últimos com /extrato ou apague o último com /desfazer.`);
+      return;
+    }
+    const linhas = r.rows.map((t: any) => [{ text: `🗑 ${t.descricao.slice(0, 24)} · ${brl(t.valor)} · ${t.data.slice(0, 5)}`, callback_data: `desfazer:${t.id}` }]);
+    await this.html(chat, r.rows.length === 1 ? "Apagar este lançamento?" : "Qual destes você quer apagar?", {
+      reply_markup: { inline_keyboard: [...linhas, [{ text: "Manter tudo", callback_data: "manter" }]] },
+    });
+  }
+  // Baixa um arquivo do Telegram com limite de tamanho.
+  private async download(fileId: string, max: number, path: RegExp) {
+    const file = await this.api("getFile", { file_id: fileId });
+    if (!path.test(file.file_path) || file.file_path.includes("..")) throw new Error("Arquivo inválido.");
+    const response = await this.fetcher(`https://api.telegram.org/file/bot${this.deps.token}/${file.file_path}`, { signal: AbortSignal.timeout(8000) });
+    if (!response.ok || Number(response.headers.get("content-length")) > max) throw new Error("Arquivo inválido.");
+    const data = new Uint8Array(await response.arrayBuffer());
+    if (data.length > max) throw new Error("Arquivo muito grande.");
+    return data;
+  }
+  private async voice(chat: number, userId: number, audio: any, update: any, message: any) {
+    if (!this.deps.transcribe) {
+      await this.send(chat, "Ainda não consigo ouvir áudios. Escreva, por exemplo: gastei 50 no mercado.");
+      return;
+    }
+    if (Number(audio.duration) > 90 || Number(audio.file_size) > 5 * 1024 * 1024) {
+      await this.send(chat, "Esse áudio é longo demais. 🙂 Mande um áudio curto (até 1 minuto e meio), por exemplo: \"gastei 50 reais no mercado\".");
+      return;
+    }
+    await this.api("sendChatAction", { chat_id: chat, action: "typing" }).catch(() => {});
+    let text = "";
+    try {
+      const bytes = await this.download(audio.file_id, 5 * 1024 * 1024, /^(voice|music|audio|documents)\/[\w.\/-]+$/);
+      text = (await this.deps.transcribe(bytes)).trim();
+      bytes.fill(0);
+    } catch (error) {
+      console.error("Telegram: falha ao transcrever áudio", String((error as Error)?.message ?? error));
+      await this.send(chat, "Não consegui entender o áudio agora. 😕 Tente de novo ou escreva a mensagem.");
+      return;
+    }
+    if (!text) {
+      await this.send(chat, "Não ouvi nada no áudio. 🤔 Tente falar mais perto do microfone.");
+      return;
+    }
+    await this.html(chat, `🎙️ <i>“${esc(text)}”</i>`);
+    const clean = wordsToNumbers(text.replace(/^[\s"“”']+|[\s"“”'.!?]+$/g, ""));
+    await this.handleText(chat, userId, clean, update, message, true);
   }
   private async pending(userId: number, chat: number): Promise<Pending | null> {
     const r = await this.scoped(userId).query(

@@ -154,7 +154,7 @@
     shell(
       `<ul class="tgc-benefits">
         <li><span class="ico">✍️</span><div><b>Registre em segundos</b><code>/despesa mercado 35,90</code> ou <code>/receita salário 3000</code></div></li>
-        <li><span class="ico">📷</span><div><b>Foto do cupom fiscal</b>Eu leio o valor e você só confirma.</div></li>
+        <li><span class="ico">📷</span><div><b>Foto do cupom ou áudio</b>Mande a foto do cupom ou fale "gastei cinquenta no mercado" e só confirme.</div></li>
         <li><span class="ico">🔔</span><div><b>Alertas de limite</b>Aviso quando você chegar a 80% do gasto máximo.</div></li>
         <li><span class="ico">📊</span><div><b>Consultas rápidas</b><code>/saldo</code>, <code>/mes</code>, <code>/extrato</code>, <code>/categorias</code> e <code>/limite</code></div></li>
       </ul>

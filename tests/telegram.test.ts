@@ -9,9 +9,12 @@ import { ensureWebhook, ensureProfile, webhookSecret, COMMANDS } from "../src/in
 const ORIGIN = "http://localhost:8787";
 const TOKEN = "123:TESTE";
 const aiCalls: any[] = [];
+const falas: string[] = [];
 const fakeAi = {
   run: async (model: string, input: any) => {
     aiCalls.push(input);
+    // Whisper (áudio): devolve o que "ouviu" conforme o arquivo.
+    if (model.includes("whisper")) return { text: falas.shift() ?? "" };
     // IA de texto (reserva da conversa)
     if (model.includes("llama-3.1")) return { response: '{"acao":"lancamento","tipo":"despesa","valor":"45","descricao":"farmácia","categoria":"saude","data":"' + new Date().toISOString().slice(0, 10) + '"}' };
     return { response: '{"estabelecimento":"Shopping Som","data":"24/07/2026","total":"R$ 1.100,00"}' };
@@ -36,7 +39,7 @@ globalThis.fetch = (async function (this: any, url: any, init?: any) {
     if (method === "getWebhookInfo") return Response.json({ ok: true, result: { url: "" } });
     if (method === "getMyDescription") return Response.json({ ok: true, result: { description: "" } });
     if (method === "getMyCommands") return Response.json({ ok: true, result: [] });
-    if (method === "getFile") return Response.json({ ok: true, result: { file_path: "photos/file_1.jpg" } });
+    if (method === "getFile") return Response.json({ ok: true, result: { file_path: String(body.file_id).startsWith("voz") ? "voice/file_2.oga" : "photos/file_1.jpg" } });
     if (method === "getMyName") return Response.json({ ok: true, result: { name: "CashFlow" } });
     return Response.json({ ok: true, result: true });
   }
@@ -167,6 +170,30 @@ test("vincular pelo código, registrar despesa, /saldo e /extrato", async () => 
   assert.match(await reply("sim"), /Despesa registrada: <b>Farmácia<\/b>/);
   txs = (await call("GET", "/api/transacoes")).data.transactions;
   assert.ok(txs.some((t: any) => t.description === "Farmácia" && t.amount === 45 && t.category === "saude"));
+  // Áudio: transcreve, mostra o que ouviu e pede confirmação do lançamento.
+  const audio = async (fala: string) => {
+    falas.push(fala);
+    sent.length = 0;
+    await hook({ update_id: ++upd, message: { message_id: upd, chat: { id: 777, type: "private" }, from: { id: 777, username: "Amanda_Teste" }, voice: { file_id: "voz" + upd, duration: 4, file_size: 9000, mime_type: "audio/ogg" } } });
+    return sent.filter((x) => x.method === "sendMessage").map((x) => x.body.text).join("\n---\n");
+  };
+  const ouvi = await audio("Gastei cinquenta reais no Uber.");
+  assert.match(ouvi, /🎙️ <i>“Gastei cinquenta reais no Uber\.”<\/i>/);
+  assert.match(ouvi, /Entendi assim[\s\S]*Uber[\s\S]*R\$\s?50,00[\s\S]*Transporte/);
+  assert.match(await audio("Não, foi sessenta."), /atualizei[\s\S]*R\$\s?60,00/);
+  assert.match(await audio("Sim, pode registrar."), /Despesa registrada: <b>Uber<\/b> · R\$\s?60,00/);
+  assert.match(await audio("Quanto gastei esse mês?"), /Saldo do mês/);
+  // Apagar por descrição (texto ou áudio).
+  const achou = await audio("Apaga a despesa do uber.");
+  assert.match(achou, /Apagar este lançamento/);
+  const botao = sent.find((x) => x.body?.reply_markup?.inline_keyboard?.[0]?.[0]?.callback_data?.startsWith("desfazer:"));
+  assert.match(botao.body.reply_markup.inline_keyboard[0][0].text, /Uber · R\$\s?60,00/);
+  assert.match(await cbk(botao.body.reply_markup.inline_keyboard[0][0].callback_data), /Apagado: <b>Uber<\/b>/);
+  assert.match(await reply("apaga a despesa do abacaxi"), /Não achei/);
+  // Áudio longo demais é recusado com orientação.
+  sent.length = 0;
+  await hook({ update_id: ++upd, message: { message_id: upd, chat: { id: 777, type: "private" }, from: { id: 777, username: "Amanda_Teste" }, voice: { file_id: "voz" + upd, duration: 300, file_size: 900000 } } });
+  assert.match(sent.find((x) => x.method === "sendMessage").body.text, /longo demais/);
   assert.match(await cbk("desvincular:sim"), /desvinculado/);
   // Desconectar pelo site também funciona (com RLS do usuário).
   await call("POST", "/api/telegram", { acao: "gerar", nome_telegram: "Amanda_Teste" });

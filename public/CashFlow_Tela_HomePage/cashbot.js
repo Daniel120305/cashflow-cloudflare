@@ -305,7 +305,7 @@
         { keys: ["alerta", "aviso de gasto", "notificacao", "notificacoes"], r: () => R("Defina um gasto máximo mensal no perfil: o CashFlow avisa no sininho 🔔 quando você chegar a 80% e a 100% dele.", { acoes: [{ label: "🎯 Definir meu limite", acao: "limite" }], sugestoes: ["Quanto ainda posso gastar?"] }) },
         { keys: ["calculadora", "ferramenta", "juros", "financiamento", "conversor", "moeda", "salario liquido", "inss", "irrf"], r: () => R("Na aba Ferramentas há calculadora de salário líquido (CLT 2026), juros compostos, financiamento e conversor de moedas.", { acoes: [{ label: "🔧 Abrir Ferramentas", acao: "ferramentas" }] }) },
         { keys: ["taxa", "bcb", "banco central", "juros dos bancos"], r: () => R("Na aba Taxas BCB você compara as taxas médias de juros dos bancos, publicadas pelo Banco Central.", { acoes: [{ label: "🏦 Abrir Taxas BCB", acao: "taxas" }] }) },
-        { keys: ["telegram", "bot do telegram", "vincular", "cupom", "nota fiscal"], r: () => {
+        { keys: ["telegram", "bot do telegram", "vincular", "cupom", "nota fiscal", "audio", "áudio"], r: () => {
             const conectado = window.CashFlowTelegram?.estado()?.vinculado;
             return R(conectado
                 ? "Seu Telegram já está conectado ao CashFlow! Fale com o bot @CashFlowPIBot:"
@@ -314,6 +314,7 @@
                     ["/despesa mercado 35,90", "registra uma despesa"],
                     ["/receita salário 3000", "registra uma receita"],
                     ["📷 foto do cupom fiscal", "leio o valor e você confirma"],
+                    ["🎙️ áudio", "fale \"gastei cinquenta no mercado\" e confirme"],
                     ["/saldo · /mes", "saldo total e resumo do mês"],
                     ["/extrato · /hoje", "últimos lançamentos"],
                     ["/categorias · /limite", "onde mais gastou e quanto falta"],

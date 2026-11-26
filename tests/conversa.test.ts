@@ -67,3 +67,22 @@ test("IA de texto: só usa o que passa na validação", async () => {
   assert.deepEqual(await ler('{"acao":"correcao","valor":"2100"}', { descricao: "x", valor: "1", data: HOJE, categoria: "lazer" }), { acao: "correcao", correcao: { valor: "2100.00" } });
   assert.equal(await ler("não sei"), null);
 });
+
+test("números falados (áudio) viram algarismos", async () => {
+  const { wordsToNumbers } = await import("../src/integrations/conversa.js");
+  assert.equal(wordsToNumbers("gastei cinquenta reais no mercado"), "gastei 50 reais no mercado");
+  assert.equal(wordsToNumbers("paguei mil e duzentos de aluguel"), "paguei 1200 de aluguel");
+  assert.equal(wordsToNumbers("gastei trinta e cinco e noventa na farmácia"), "gastei 35,90 na farmácia");
+  assert.equal(wordsToNumbers("recebi dois mil e cem reais e cinquenta centavos"), "recebi 2100,50");
+  assert.equal(wordsToNumbers("comprei um café de oito reais"), "comprei um café de 8 reais");
+  assert.equal(wordsToNumbers("troca para dois mil e cem"), "troca para 2100");
+});
+
+test("apagar por descrição", async () => {
+  const { parseDelete } = await import("../src/integrations/conversa.js");
+  assert.equal(parseDelete("apaga a despesa do mercado"), "mercado");
+  assert.equal(parseDelete("Remover o uber de ontem."), "uber");
+  assert.equal(parseDelete("exclui a receita de salário"), "salario");
+  assert.equal(parseDelete("apaga o último"), undefined);
+  assert.equal(parseDelete("gastei 50 no mercado"), undefined);
+});
