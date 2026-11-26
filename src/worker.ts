@@ -11,6 +11,7 @@ import { TelegramService } from "./integrations/telegram.js";
 import { workersAiOcr } from "./integrations/ocr.js";
 import { aiTextInterpreter } from "./integrations/conversa.js";
 import { workersAiTranscriber } from "./integrations/audio.js";
+import { aiDocumentReader } from "./integrations/documents.js";
 import { ensureWebhook, ensureProfile, webhookSecret } from "./integrations/telegram-setup.js";
 import { saveTransaction, monthlySummary } from "./services/finance.js";
 import { drainQueues, cleanup } from "./services/queues.js";
@@ -19,7 +20,10 @@ import { redirectFor, assetFor, rewritePage } from "./pages.js";
 export interface Env {
   ASSETS: { fetch: (request: Request) => Promise<Response> };
   HYPERDRIVE: { connectionString: string };
-  AI?: { run: (model: string, input: any) => Promise<any> };
+  AI?: {
+    run: (model: string, input: any) => Promise<any>;
+    toMarkdown?: (file: { name: string; blob: Blob }) => Promise<any>;
+  };
   APP_ORIGIN?: string;
   APP_EXTRA_ORIGINS?: string;
   BREVO_API_KEY?: string;
@@ -73,6 +77,16 @@ const telegramFor = (db: Database, env: Env) =>
         siteUrl: env.APP_ORIGIN,
         interpret: aiTextInterpreter(env.AI),
         transcribe: workersAiTranscriber(env.AI),
+        // Arquivo -> Markdown (PDF, Excel, CSV, Word...) pelo Workers AI.
+        toMarkdown: env.AI?.toMarkdown
+          ? async (name: string, bytes: Uint8Array) => {
+              const r = await env.AI!.toMarkdown!({ name, blob: new Blob([bytes as Uint8Array<ArrayBuffer>]) });
+              const one = Array.isArray(r) ? r[0] : r;
+              if (!one || one.format === "error") throw new Error(one?.error ?? "conversão falhou");
+              return String(one.data ?? "");
+            }
+          : undefined,
+        readDocument: aiDocumentReader(env.AI),
       })
     : undefined;
 

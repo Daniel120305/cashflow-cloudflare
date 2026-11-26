@@ -10,9 +10,16 @@ const ORIGIN = "http://localhost:8787";
 const TOKEN = "123:TESTE";
 const aiCalls: any[] = [];
 const falas: string[] = [];
+const arquivos: Record<string, string> = {
+  "nota.pdf": "NOTA FISCAL DE SERVIÇO\nPrestador: Mercado Pago\nValor total: R$ 2.100,00\nEmitida em 20/11/2026",
+  "extrato.xlsx": "## Planilha1\n\n| Data | Descrição | Valor |\n|---|---|---|\n| 21/11/2026 | Padaria Pão Quente | -12,50 |\n| 22/11/2026 | Pix recebido Maria | 150,00 |\n| 23/11/2026 | Posto Shell | -200,00 |",
+};
 const fakeAi = {
+  toMarkdown: async (f: { name: string }) => ({ name: f.name, format: "markdown", data: arquivos[f.name] ?? "" }),
   run: async (model: string, input: any) => {
     aiCalls.push(input);
+    // IA de documentos (PDF sem tabela).
+    if (model.includes("llama-3.3")) return { response: '{"tipo":"comprovante","estabelecimento":"Mercado Pago - Shopping Bom","data":"2026-11-20","total":"2.100,00","receita":false}' };
     // Whisper (áudio): devolve o que "ouviu" conforme o arquivo.
     if (model.includes("whisper")) return { text: falas.shift() ?? "" };
     // IA de texto (reserva da conversa)
@@ -31,6 +38,7 @@ const realFetch = globalThis.fetch;
 globalThis.fetch = (async function (this: any, url: any, init?: any) {
   if (this !== undefined && this !== globalThis) throw new TypeError("Illegal invocation");
   const u = String(url);
+  if (u.startsWith("https://api.telegram.org/file/documents/")) return new Response(new Uint8Array([37, 80, 68, 70]));
   if (u.startsWith("https://api.telegram.org/file/")) return new Response(new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3]), { headers: { "content-length": "6" } });
   if (u.startsWith("https://api.telegram.org/")) {
     const method = u.split("/").pop();
@@ -39,7 +47,7 @@ globalThis.fetch = (async function (this: any, url: any, init?: any) {
     if (method === "getWebhookInfo") return Response.json({ ok: true, result: { url: "" } });
     if (method === "getMyDescription") return Response.json({ ok: true, result: { description: "" } });
     if (method === "getMyCommands") return Response.json({ ok: true, result: [] });
-    if (method === "getFile") return Response.json({ ok: true, result: { file_path: String(body.file_id).startsWith("voz") ? "voice/file_2.oga" : "photos/file_1.jpg" } });
+    if (method === "getFile") return Response.json({ ok: true, result: { file_path: String(body.file_id).startsWith("voz") ? "voice/file_2.oga" : String(body.file_id).startsWith("doc") ? "documents/file_3.bin" : "photos/file_1.jpg" } });
     if (method === "getMyName") return Response.json({ ok: true, result: { name: "CashFlow" } });
     return Response.json({ ok: true, result: true });
   }
@@ -198,6 +206,30 @@ test("vincular pelo código, registrar despesa, /saldo e /extrato", async () => 
   sent.length = 0;
   await hook({ update_id: ++upd, message: { message_id: upd, chat: { id: 777, type: "private" }, from: { id: 777, username: "Amanda_Teste" }, voice: { file_id: "voz" + upd, duration: 300, file_size: 900000 } } });
   assert.match(sent.find((x) => x.method === "sendMessage").body.text, /longo demais/);
+  // Arquivos: PDF de nota (IA lê) e planilha (regras leem a tabela).
+  const arquivo = async (nome: string, mime: string) => {
+    sent.length = 0;
+    await hook({ update_id: ++upd, message: { message_id: upd, chat: { id: 777, type: "private" }, from: { id: 777, username: "Amanda_Teste" }, document: { file_id: "doc" + upd, file_name: nome, mime_type: mime, file_size: 4000 } } });
+    return sent.filter((x) => x.method === "sendMessage").map((x) => x.body.text).join("\n---\n");
+  };
+  const nota = await arquivo("nota.pdf", "application/pdf");
+  assert.match(nota, /Lendo <b>nota\.pdf<\/b>/);
+  assert.match(nota, /Li este arquivo[\s\S]*Mercado Pago - Shopping Bom[\s\S]*R\$\s?2\.100,00[\s\S]*20\/11\/2026/);
+  assert.match(await reply("pode registrar"), /Despesa registrada: <b>Mercado Pago - Shopping Bom<\/b>/);
+  // Planilha: um lançamento já existe (Posto Shell 200 em 23/11) e deve ser pulado.
+  await call("POST", "/api/transacoes", { description: "Posto Shell", amount: "200", category: "transporte", type: "expense", date: "2026-11-23", idempotency_key: "dup-" + stamp });
+  const planilha = await arquivo("extrato.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  assert.match(planilha, /Encontrei 3 lançamentos[\s\S]*2 despesas: <b>R\$\s?212,50<\/b>[\s\S]*1 receita: <b>R\$\s?150,00<\/b>/);
+  const imp = sent.find((x) => x.body?.reply_markup?.inline_keyboard?.[0]?.[0]?.callback_data?.startsWith("lote:"));
+  const importado = await cbk(imp.body.reply_markup.inline_keyboard[0][0].callback_data);
+  assert.match(importado, /2 lançamentos importados[\s\S]*1 já existia e foi pulado/);
+  // Repetir o botão não importa de novo.
+  assert.match(await cbk(imp.body.reply_markup.inline_keyboard[0][0].callback_data), /já foi feita ou expirou/);
+  txs = (await call("GET", "/api/transacoes")).data.transactions;
+  assert.equal(txs.filter((t: any) => t.description === "Posto Shell").length, 1);
+  assert.ok(txs.some((t: any) => t.description === "Pix recebido Maria" && t.type === "income" && t.amount === 150));
+  // Formato não suportado.
+  assert.match(await arquivo("video.mp4", "video/mp4"), /Ainda não leio arquivos <b>\.mp4<\/b>/);
   assert.match(await cbk("desvincular:sim"), /desvinculado/);
   // Desconectar pelo site também funciona (com RLS do usuário).
   await call("POST", "/api/telegram", { acao: "gerar", nome_telegram: "Amanda_Teste" });

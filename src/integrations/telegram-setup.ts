@@ -31,6 +31,7 @@ export const BOT_DESCRIPTION =
   "• Registre gastos e receitas: /despesa mercado 35,90 ou escreva do seu jeito, como \"gastei 50 no mercado\"\n" +
   "• Mande a foto do cupom fiscal: eu leio e você corrige o que precisar\n" +
   "• Fale por áudio: \"gastei cinquenta no mercado\" ou \"apaga a despesa do uber\"\n" +
+  "• Envie PDF, Excel ou CSV (nota, boleto, extrato) e eu importo os lançamentos\n" +
   "• Consulte /saldo, /extrato, /categorias e /limite\n" +
   "• Receba alertas quando chegar a 80% do limite\n\n" +
   "Para começar, vincule sua conta no Perfil do site.";

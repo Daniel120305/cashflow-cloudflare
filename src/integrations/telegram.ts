@@ -1,9 +1,10 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import type { Database } from "../db.js";
 import { userDatabase } from "../db.js";
 import { categoryLabel, parseTransaction, brazilToday } from "./receipt.js";
 import { readReceipt } from "./ocr.js";
 import { parseCorrection, parseNatural, intentOf, parseDelete, wordsToNumbers, EXPENSE_CATEGORIES, type Correction, type AiReading } from "./conversa.js";
+import { docKind, rowsFromDocument, extOf, type Row, type DocReading } from "./documents.js";
 type Input = {
   description: string;
   amount: string;
@@ -25,6 +26,9 @@ type Deps = {
   interpret?: (text: string, pending: any) => Promise<AiReading | null>;
   // Transcrição de áudio (Whisper no Workers AI).
   transcribe?: (audio: Uint8Array, durationSec?: number) => Promise<string>;
+  // Arquivos: conversão para texto (Workers AI toMarkdown) e leitura por IA.
+  toMarkdown?: (name: string, bytes: Uint8Array) => Promise<string>;
+  readDocument?: (text: string) => Promise<DocReading>;
 };
 // Pendência (comprovante lido ou lançamento entendido pela IA) esperando o "Registrar".
 // O tipo fica em texto_ocr ("tipo:income"); sem marca, é despesa.
@@ -70,6 +74,7 @@ export const HELP_TEXT = [
   "• Ou escreva do seu jeito: <code>gastei 50 no mercado</code>, <code>paguei 120 de luz ontem</code>",
   "• 📷 Foto do cupom fiscal — leio e você corrige o que precisar (ex.: <code>valor 2.100</code>)",
   "• 🎙️ Áudio — fale \"gastei cinquenta no mercado\" e confirme",
+  "• 📎 Arquivo — PDF (nota, boleto, comprovante, extrato), Excel, CSV ou Word: leio e importo",
   "• /desfazer — apaga o último lançamento",
   "• <code>apaga a despesa do mercado</code> — procura e apaga (também por áudio)",
   "",
@@ -203,6 +208,10 @@ export class TelegramService {
       await this.photo(chat, userId, message.photo.at(-1));
       return;
     }
+    if (message.document) {
+      await this.document(chat, userId, message.document);
+      return;
+    }
     if (message.voice || message.audio) {
       await this.voice(chat, userId, message.voice ?? message.audio, update, message);
       return;
@@ -325,9 +334,146 @@ export class TelegramService {
     const clean = wordsToNumbers(text.replace(/^[\s"“”']+|[\s"“”'.!?]+$/g, ""));
     await this.handleText(chat, userId, clean, update, message, true);
   }
+  private async document(chat: number, userId: number, doc: any) {
+    const name = String(doc.file_name ?? "arquivo");
+    const kind = docKind(name, String(doc.mime_type ?? ""));
+    if (kind === "image") return this.photo(chat, userId, doc);
+    if (kind === "unsupported") {
+      await this.html(chat, `Ainda não leio arquivos <b>.${esc(extOf(name) || "desse tipo")}</b>. 📎\nEnvie <b>PDF</b> (nota, boleto, comprovante, extrato), <b>Excel</b> (.xlsx, .xls), <b>CSV</b>, <b>Word</b> (.docx), <b>.ods</b> ou uma <b>foto</b>.`);
+      return;
+    }
+    if (!this.deps.toMarkdown) {
+      await this.send(chat, "Ainda não consigo ler arquivos. Envie uma foto do comprovante ou escreva, ex.: gastei 50 no mercado.");
+      return;
+    }
+    if (Number(doc.file_size) > 5 * 1024 * 1024) {
+      await this.send(chat, "Esse arquivo é grande demais (máximo 5 MB). 📎");
+      return;
+    }
+    await this.html(chat, `📄 Lendo <b>${esc(name.length > 40 ? name.slice(0, 37) + "…" : name)}</b>, só um instante…`).catch(() => {});
+    await this.api("sendChatAction", { chat_id: chat, action: "typing" }).catch(() => {});
+    let text = "";
+    try {
+      const bytes = await this.download(doc.file_id, 5 * 1024 * 1024, /^(documents|photos)\/[\w.\/-]+$/);
+      text = await this.deps.toMarkdown(name, bytes);
+      bytes.fill(0);
+    } catch (error) {
+      console.error("Telegram: falha ao converter arquivo", name, String((error as Error)?.message ?? error));
+      await this.send(chat, "Não consegui abrir esse arquivo. 😕 Se for PDF com senha ou planilha protegida, tire a proteção e envie de novo.");
+      return;
+    }
+    // 1) Planilhas/extratos: tabela lida por regras.
+    const rows = rowsFromDocument(text);
+    if (rows.length >= 2) return this.offerBatch(chat, userId, rows, name);
+    if (rows.length === 1) return this.propose(chat, userId, rows[0], "📄 <b>Li este arquivo:</b>");
+    // 2) Sem tabela: IA de texto lê o comprovante ou a lista.
+    const reading = (await this.deps.readDocument?.(text).catch(() => null)) ?? { tipo: "nada" as const };
+    if (reading.tipo === "lista") return reading.linhas.length === 1 ? this.propose(chat, userId, reading.linhas[0], "📄 <b>Li este arquivo:</b>") : this.offerBatch(chat, userId, reading.linhas, name);
+    if (reading.tipo === "comprovante") {
+      const type = reading.receita ? "income" : "expense";
+      const { categoryFrom } = await import("./conversa.js");
+      const { classifyExpense, brazilToday: hoje } = await import("./receipt.js");
+      return this.propose(chat, userId, {
+        type,
+        amount: reading.valor,
+        description: reading.descricao,
+        date: reading.data ?? hoje(),
+        category: type === "income" ? "outros-receitas" : categoryFrom(reading.descricao) ?? classifyExpense(reading.descricao),
+      }, "📄 <b>Li este arquivo:</b>");
+    }
+    await this.send(chat, "Não encontrei valores para registrar nesse arquivo. 🤔 Se for um comprovante, tente mandar uma foto dele.");
+  }
+  // Vários lançamentos (planilha/extrato): resumo + "Importar todos".
+  private async offerBatch(chat: number, userId: number, rows: Row[], name: string) {
+    const lista = rows.slice(0, 200);
+    const lote = randomBytes(4).toString("hex");
+    await this.scoped(userId).transaction(async (tx) => {
+      for (const r of lista)
+        await tx.query(
+          "INSERT INTO ocr_pendencias(telegram_id,usuario_id,descricao,valor,categoria,data_transacao,texto_ocr,expira_em) VALUES($1,$2,$3,$4,$5,$6,$7,NOW()+INTERVAL '30 minutes')",
+          [chat, userId, r.description, r.amount, r.category, r.date, `lote:${lote}:${r.type}`],
+        );
+    });
+    const despesas = lista.filter((r) => r.type === "expense");
+    const receitas = lista.filter((r) => r.type === "income");
+    const soma = (rs: Row[]) => rs.reduce((t, r) => t + Number(r.amount), 0);
+    const datas = lista.map((r) => r.date).sort();
+    const fmt = (d: string) => d.split("-").reverse().join("/");
+    const previa = lista.slice(0, 8).map((r) => `${fmt(r.date).slice(0, 5)} ${r.type === "income" ? "🟢" : "🔴"} ${esc(r.description.slice(0, 28))} · ${brl(r.amount)}`);
+    await this.html(
+      chat,
+      [
+        `📊 <b>Encontrei ${lista.length} lançamentos</b> em <i>${esc(name.slice(0, 40))}</i>`,
+        `${fmt(datas[0])} a ${fmt(datas.at(-1)!)}`,
+        "",
+        `🔴 ${despesas.length} despesa${despesas.length === 1 ? "" : "s"}: <b>${brl(soma(despesas))}</b>`,
+        `🟢 ${receitas.length} receita${receitas.length === 1 ? "" : "s"}: <b>${brl(soma(receitas))}</b>`,
+        "",
+        ...previa,
+        lista.length > 8 ? `<i>…e mais ${lista.length - 8}</i>` : "",
+        rows.length > 200 ? `<i>(Importo no máximo 200 por arquivo.)</i>` : "",
+        "",
+        "Lançamentos que já existirem no CashFlow (mesma data, valor e descrição) são pulados.",
+      ].filter((l, i, a) => l !== "" || a[i - 1] !== "").join("\n"),
+      {
+        reply_markup: {
+          inline_keyboard: [[
+            { text: `✅ Importar ${lista.length}`, callback_data: `lote:${lote}:ok` },
+            { text: "✖️ Cancelar", callback_data: `lote:${lote}:no` },
+          ]],
+        },
+      },
+    );
+  }
+  private async importBatch(chat: number, userId: number, lote: string, ok: boolean) {
+    const db = this.scoped(userId);
+    if (!ok) {
+      await db.query("DELETE FROM ocr_pendencias WHERE usuario_id=$1 AND telegram_id=$2 AND texto_ocr LIKE $3 AND confirmado_em IS NULL", [userId, chat, `lote:${lote}:%`]);
+      await this.send(chat, "Ok, importação cancelada. Nada foi registrado.");
+      return;
+    }
+    const r = await db.query(
+      "SELECT * FROM ocr_pendencias WHERE usuario_id=$1 AND telegram_id=$2 AND texto_ocr LIKE $3 AND confirmado_em IS NULL AND expira_em>NOW() ORDER BY id",
+      [userId, chat, `lote:${lote}:%`],
+    );
+    if (!r.rows.length) {
+      await this.send(chat, "Essa importação já foi feita ou expirou. Envie o arquivo de novo.");
+      return;
+    }
+    let novos = 0, repetidos = 0, falhas = 0, total = 0;
+    for (const p of r.rows as Pending[]) {
+      const type = String(p.texto_ocr).endsWith(":income") ? "income" : "expense";
+      try {
+        const dup = await db.query(
+          "SELECT 1 FROM transacoes WHERE usuario_id=$1 AND data_transacao=$2 AND valor=$3 AND tipo=$4 AND lower(descricao)=lower($5) LIMIT 1",
+          [userId, pendingDate(p), p.valor, type, p.descricao],
+        );
+        if (dup.rows.length) {
+          repetidos++;
+          continue;
+        }
+        await this.deps.record(userId, { description: p.descricao, amount: String(p.valor), category: p.categoria, type, date: pendingDate(p), idempotency_key: `lote:${p.id}` });
+        novos++;
+        total += Number(p.valor) * (type === "income" ? 1 : -1);
+      } catch (error) {
+        falhas++;
+        console.error("Telegram: falha ao importar linha", p.id, String((error as Error)?.message ?? error));
+      }
+    }
+    await db.query("UPDATE ocr_pendencias SET confirmado_em=NOW() WHERE usuario_id=$1 AND telegram_id=$2 AND texto_ocr LIKE $3", [userId, chat, `lote:${lote}:%`]);
+    await this.html(
+      chat,
+      [
+        `✅ <b>${novos} lançamento${novos === 1 ? "" : "s"} importado${novos === 1 ? "" : "s"}</b>${novos ? ` (saldo ${total >= 0 ? "+" : "−"}${brl(Math.abs(total))})` : ""}`,
+        repetidos ? `↪️ ${repetidos} já existia${repetidos === 1 ? "" : "m"} e ${repetidos === 1 ? "foi pulado" : "foram pulados"}` : "",
+        falhas ? `⚠️ ${falhas} não ${falhas === 1 ? "pôde" : "puderam"} ser importado${falhas === 1 ? "" : "s"}` : "",
+      ].filter(Boolean).join("\n"),
+      { reply_markup: { inline_keyboard: [[{ text: "💰 Saldo", callback_data: "cmd:saldo" }, { text: "📊 Categorias", callback_data: "cmd:categorias" }]] } },
+    );
+  }
   private async pending(userId: number, chat: number): Promise<Pending | null> {
     const r = await this.scoped(userId).query(
-      "SELECT * FROM ocr_pendencias WHERE usuario_id=$1 AND telegram_id=$2 AND confirmado_em IS NULL AND expira_em>NOW() ORDER BY id DESC LIMIT 1",
+      "SELECT * FROM ocr_pendencias WHERE usuario_id=$1 AND telegram_id=$2 AND confirmado_em IS NULL AND expira_em>NOW() AND (texto_ocr IS NULL OR texto_ocr NOT LIKE 'lote:%') ORDER BY id DESC LIMIT 1",
       [userId, chat],
     );
     return r.rows[0] ?? null;
@@ -583,6 +729,11 @@ export class TelegramService {
       await this.html(chat, r.rows[0] ? `🗑 Apagado: <b>${esc(r.rows[0].descricao)}</b> · ${brl(r.rows[0].valor)}` : "Esse lançamento já não existe.");
       return;
     }
+    const lote = data.match(/^lote:([0-9a-f]{8}):(ok|no)$/);
+    if (lote) {
+      await this.importBatch(chat, userId, lote[1], lote[2] === "ok");
+      return;
+    }
     const edit = data.match(/^editar:(valor|data|cat|nome):(\d+)$/);
     if (edit) {
       const [, campo, id] = edit;
@@ -674,7 +825,7 @@ export class TelegramService {
         throw new Error("Imagem muito grande.");
       const file = await this.api("getFile", { file_id: photo.file_id });
       if (
-        !/^photos\/[\w.\/-]+$/.test(file.file_path) ||
+        !/^(photos|documents)\/[\w.\/-]+$/.test(file.file_path) ||
         file.file_path.includes("..")
       )
         throw new Error("Imagem inválida.");
