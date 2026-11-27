@@ -16,10 +16,10 @@ img.profile-logo.brand-logo { padding: 0; backdrop-filter: none; }
    troca as cores dos links. Reforça o que costuma ficar fraco: texto
    secundário, bordas de campos, placeholders, links no meio do texto e foco. */
 html.high-contrast, body.high-contrast {
-  --hc-fg: #000; --hc-soft: #111827; --hc-line: #0f172a; --hc-link: #0039a6; --hc-focus: #0039a6;
+  --hc-fg: #000; --hc-soft: #111827; --hc-line: #0f172a; --hc-link: #0039a6; --hc-focus: #1d4ed8;
 }
 html.theme-dark.high-contrast, body.theme-dark.high-contrast {
-  --hc-fg: #fff; --hc-soft: #f1f5f9; --hc-line: #e2e8f0; --hc-link: #a5d0ff; --hc-focus: #ffd34d;
+  --hc-fg: #fff; --hc-soft: #f1f5f9; --hc-line: #e2e8f0; --hc-link: #a5d0ff; --hc-focus: #60a5fa;
 }
 /* O filtro fica no <html>, onde não atrapalha os elementos fixos. */
 html.high-contrast { filter: contrast(1.15); }
@@ -42,3 +42,13 @@ html.theme-dark.high-contrast, body.theme-dark.high-contrast { --hc-edge: rgba(2
   color: var(--hc-soft) !important; opacity: 1 !important;
 }
 .high-contrast .navigation .nav-btn:not(.active) .nav-ico { filter: none !important; opacity: 1 !important; }
+/* Campos: mesma borda forte em todos (vence as regras do tema escuro da Home)
+   e, ao focar, a borda continua igual e ganha um anel azul por fora. */
+:is(html, body).high-contrast.high-contrast :is(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]), select, textarea),
+:is(html, body).high-contrast.high-contrast :is(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]), select, textarea):focus {
+  border: 2px solid var(--hc-line) !important;
+}
+:is(html, body).high-contrast.high-contrast :is(input, select, textarea, button, a, summary):focus-visible,
+:is(html, body).high-contrast.high-contrast :is(input:not([type=checkbox]):not([type=radio]), select, textarea):focus {
+  outline: 3px solid var(--hc-focus) !important; outline-offset: 2px !important; box-shadow: none !important;
+}
