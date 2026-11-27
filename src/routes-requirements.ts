@@ -35,17 +35,18 @@ const ratesCache = new Map<string, { at: number; data: any }>();
 const fxCache = new Map<string, { at: number; data: any }>();
 export const FX_CURRENCIES = ["USD", "EUR", "GBP", "ARS", "CAD", "AUD", "JPY", "CHF", "CNY"];
 const brDate = (d: Date) => `${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}-${d.getUTCFullYear()}`;
+// Workers não manda User-Agent por padrão; algumas APIs recusam sem ele.
+const FX_HEADERS = { Accept: "application/json", "User-Agent": "CashFlow/1.0 (+https://app.cashflow-pi.workers.dev)" };
 export async function fetchExchangeRate(moeda: string, get: typeof fetch = fetch) {
   const errors: string[] = [];
-  // 1) AwesomeAPI: cotação comercial em tempo real (gratuita, sem chave).
-  try {
-    const r = await get(`https://economia.awesomeapi.com.br/json/last/${moeda}-BRL`, {
-      headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(6000),
-    });
+  const tryJson = async (url: string, ms = 6000) => {
+    const r = await get(url, { headers: FX_HEADERS, signal: AbortSignal.timeout(ms) });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const j = (await r.json()) as any;
-    const q = j?.[`${moeda}BRL`];
+    return (await r.json()) as any;
+  };
+  // 1) AwesomeAPI: cotação comercial em tempo real (a mesma referência do Google).
+  try {
+    const q = (await tryJson(`https://economia.awesomeapi.com.br/json/last/${moeda}-BRL`))?.[`${moeda}BRL`];
     const bid = Number(q?.bid);
     if (!(bid > 0)) throw new Error("sem cotação");
     const ts = Number(q?.timestamp);
@@ -58,20 +59,57 @@ export async function fetchExchangeRate(moeda: string, get: typeof fetch = fetch
   } catch (e) {
     errors.push(`AwesomeAPI: ${String((e as Error)?.message ?? e)}`);
   }
-  // 2) Banco Central (PTAX): última cotação de venda dos últimos 10 dias.
+  // 2) Taxa de mercado (média) atualizada diariamente, servida por CDN.
+  const low = moeda.toLowerCase();
+  for (const url of [
+    `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/${low}.json`,
+    `https://latest.currency-api.pages.dev/v1/currencies/${low}.json`,
+  ]) {
+    try {
+      const j = await tryJson(url);
+      const v = Number(j?.[low]?.brl);
+      if (!(v > 0)) throw new Error("sem cotação");
+      return {
+        moeda,
+        cotacao: v,
+        avisos: [...errors],
+        fonte: "Mercado (média diária)",
+        atualizado_em: j?.date ? new Date(`${j.date}T12:00:00-03:00`).toISOString() : new Date().toISOString(),
+      };
+    } catch (e) {
+      errors.push(`currency-api: ${String((e as Error)?.message ?? e)}`);
+    }
+  }
+  // 3) ExchangeRate-API (sem chave), também taxa de mercado diária.
+  try {
+    const j = await tryJson(`https://open.er-api.com/v6/latest/${moeda}`);
+    const v = Number(j?.rates?.BRL);
+    if (j?.result !== "success" || !(v > 0)) throw new Error("sem cotação");
+    return {
+      moeda,
+      avisos: [...errors],
+      cotacao: v,
+      fonte: "ExchangeRate-API (mercado)",
+      atualizado_em: j?.time_last_update_unix ? new Date(j.time_last_update_unix * 1000).toISOString() : new Date().toISOString(),
+    };
+  } catch (e) {
+    errors.push(`ExchangeRate-API: ${String((e as Error)?.message ?? e)}`);
+  }
+  // 4) Banco Central (PTAX): referência oficial, última de venda dos últimos 10 dias.: última cotação de venda dos últimos 10 dias.
   try {
     const fim = new Date();
     const ini = new Date(fim.getTime() - 10 * 86400000);
     const url =
       "https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoMoedaPeriodo(moeda=@moeda,dataInicial=@dataInicial,dataFinalCotacao=@dataFinalCotacao)" +
       `?@moeda='${moeda}'&@dataInicial='${brDate(ini)}'&@dataFinalCotacao='${brDate(fim)}'&$top=100&$format=json`;
-    const r = await get(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(8000) });
+    const r = await get(url, { headers: FX_HEADERS, signal: AbortSignal.timeout(8000) });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const rows = (((await r.json()) as any)?.value ?? []) as any[];
     const last = rows.filter((x) => Number(x?.cotacaoVenda) > 0).sort((a, b) => String(a.dataHoraCotacao).localeCompare(String(b.dataHoraCotacao))).at(-1);
     if (!last) throw new Error("sem cotação");
     return {
       moeda,
+      avisos: [...errors],
       cotacao: Number(last.cotacaoVenda),
       fonte: "Banco Central (PTAX)",
       atualizado_em: new Date(String(last.dataHoraCotacao).replace(" ", "T") + "-03:00").toISOString(),

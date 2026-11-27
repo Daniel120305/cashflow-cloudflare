@@ -16,9 +16,22 @@ test("câmbio: usa a AwesomeAPI quando ela responde", async () => {
   assert.match(urls[0], /economia\.awesomeapi\.com\.br\/json\/last\/USD-BRL/);
 });
 
-test("câmbio: AwesomeAPI fora do ar → PTAX do Banco Central (última cotação)", async () => {
+test("câmbio: AwesomeAPI fora do ar → taxa de mercado (CDN) antes do Banco Central", async () => {
+  const urls: string[] = [];
+  const r = await fetchExchangeRate("USD", (async (u: string, init: any) => {
+    urls.push(String(u));
+    assert.match(init.headers["User-Agent"], /CashFlow/);
+    if (String(u).includes("awesomeapi")) return json({ status: 429 }, 429);
+    return json({ date: "2026-11-27", usd: { brl: 5.6512 } });
+  }) as any);
+  assert.equal(r.cotacao, 5.6512);
+  assert.match(r.fonte, /Mercado/);
+  assert.equal(urls.length, 2);
+});
+
+test("câmbio: só o Banco Central responde → PTAX (última cotação)", async () => {
   const r = await fetchExchangeRate("EUR", (async (u: string) => {
-    if (String(u).includes("awesomeapi")) return json({ message: "erro" }, 503);
+    if (!String(u).includes("olinda")) return json({ message: "erro" }, 503);
     assert.match(String(u), /olinda\.bcb\.gov\.br.*PTAX.*@moeda='EUR'/);
     return json({ value: [
       { cotacaoVenda: 6.1, dataHoraCotacao: "2026-11-25 13:05:00.000" },
@@ -33,6 +46,6 @@ test("câmbio: AwesomeAPI fora do ar → PTAX do Banco Central (última cotaçã
 test("câmbio: as duas fontes falham → erro (o site abre o campo manual)", async () => {
   await assert.rejects(
     fetchExchangeRate("GBP", (async () => { throw new Error("offline"); }) as any),
-    /AwesomeAPI: offline \| BCB PTAX: offline/,
+    /AwesomeAPI: offline \| currency-api: offline \| currency-api: offline \| ExchangeRate-API: offline \| BCB PTAX: offline/,
   );
 });

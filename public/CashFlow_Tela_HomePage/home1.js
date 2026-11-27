@@ -1558,9 +1558,12 @@ class FinanceManager {
         return j;
     }
 
-    fxManual(open, motivo) {
+    fxManual(open, motivo, user) {
         const group = document.getElementById('exchangeRateGroup');
         if (!group) return;
+        // Aberto pela pessoa ("Usar outra cotação"): continua aberto até trocar as moedas.
+        if (user !== undefined) this._fxManualUser = !!user;
+        if (!open && this._fxManualUser) return;
         group.hidden = !open;
         const de = document.getElementById('fromCurrency').value, para = document.getElementById('toCurrency').value;
         const estrangeira = de === 'BRL' ? para : de;
@@ -1595,7 +1598,7 @@ class FinanceManager {
                 const hora = isNaN(quando) ? '' : ` · ${quando.toLocaleDateString('pt-BR')} ${quando.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
                 return `<strong>1 ${r.moeda} = R$ ${fmt(Number(r.cotacao))}</strong> <small>${this.escapeHtml(r.fonte)}${hora}${r.desatualizado ? ' · pode estar desatualizada' : ''}</small>`;
             });
-            this.fxStatus(linhas.join('<br>') + ' <button type="button" class="fx-manual-link" onclick="financeManager.fxManual(true)">Usar outra cotação</button>', 'ok');
+            this.fxStatus(linhas.join('<br>') + ' <button type="button" class="fx-manual-link" onclick="financeManager.fxManual(true, null, true); document.getElementById(\'exchangeRate\')?.focus()">Usar outra cotação</button>', 'ok');
         } catch (error) {
             if (seq !== this._fxSeq) return;
             if (de !== 'BRL' && para !== 'BRL') {
@@ -2634,10 +2637,14 @@ function initThemePanel() {
 
 // Conversor de moedas: busca a cotação ao abrir Ferramentas e ao trocar as moedas.
 document.addEventListener('change', (e) => {
-    if (e.target?.id === 'fromCurrency' || e.target?.id === 'toCurrency') window.financeManager?.refreshFx?.();
+    if (e.target?.id === 'fromCurrency' || e.target?.id === 'toCurrency') {
+        if (window.financeManager) window.financeManager._fxManualUser = false;
+        window.financeManager?.refreshFx?.();
+    }
 });
 document.addEventListener('click', (e) => {
-    if (e.target?.closest?.('[data-tab="tools"]')) setTimeout(() => window.financeManager?.refreshFx?.(), 50);
+    // Só os botões da aba (o <body> também ganha data-tab="tools" quando a aba está aberta).
+    if (e.target?.closest?.('.nav-btn[data-tab="tools"], .hero-action-btn[data-tab="tools"]')) setTimeout(() => window.financeManager?.refreshFx?.(), 50);
 });
 if (document.getElementById('tools')?.classList.contains('active')) setTimeout(() => window.financeManager?.refreshFx?.(), 300);
 // Ao trocar tema/alto contraste, redesenha o gráfico com as novas cores.
