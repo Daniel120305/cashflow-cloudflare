@@ -52,3 +52,18 @@ html.theme-dark.high-contrast, body.theme-dark.high-contrast { --hc-edge: rgba(2
 :is(html, body).high-contrast.high-contrast :is(input:not([type=checkbox]):not([type=radio]), select, textarea):focus {
   outline: 3px solid var(--hc-focus) !important; outline-offset: 2px !important; box-shadow: none !important;
 }
+/* iPhone (Safari/WebKit): campos de data/mês/hora têm largura mínima própria e
+   escapavam do cartão. Eles passam a respeitar a largura do formulário. */
+input:is([type=date], [type=month], [type=time], [type=datetime-local], [type=week]) {
+  display: block; width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box;
+}
+@supports (-webkit-touch-callout: none) {
+  /* Só no iOS: tira o estilo nativo que impõe a largura e centraliza o texto. */
+  input:is([type=date], [type=month], [type=time], [type=datetime-local], [type=week]) {
+    -webkit-appearance: none; appearance: none; text-align: left; min-height: 44px; line-height: normal;
+  }
+  input:is([type=date], [type=month], [type=time], [type=datetime-local], [type=week])::-webkit-date-and-time-value { text-align: left; margin: 0; min-height: 1.2em; }
+}
+/* Itens de formulário em grade/flex podem encolher em telas estreitas. */
+:is(.form-group, .form-row, .form-grid, .transaction-form-grid, .input-group, .requirement-card form, fieldset) > * { min-width: 0; }
+input, select, textarea { max-width: 100%; }
