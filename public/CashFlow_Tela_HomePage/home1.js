@@ -1574,6 +1574,31 @@ class FinanceManager {
         if (open && motivo) this.fxStatus(motivo, 'warn');
     }
 
+    // Alterna entre a cotação automática e uma digitada pela pessoa.
+    toggleFxManual() {
+        const abrir = !this._fxManualUser;
+        if (abrir) {
+            this.fxManual(true, null, true);
+            document.getElementById('exchangeRate')?.focus();
+        } else {
+            this._fxManualUser = false;
+            const input = document.getElementById('exchangeRate');
+            if (input) input.value = '';
+            this.fxManual(false);
+            // Resultado já mostrado com a cotação manual: recalcula com a automática.
+            if (document.getElementById('currencyResult')?.style.display === 'block') this.convertCurrency();
+        }
+        this.fxLinkLabel();
+    }
+
+    fxLinkLabel() {
+        const link = document.querySelector('#fxStatus .fx-manual-link');
+        if (!link) return;
+        link.textContent = this._fxManualUser ? 'Usar a cotação automática' : 'Usar outra cotação';
+        link.setAttribute('aria-expanded', String(!!this._fxManualUser));
+        link.setAttribute('aria-controls', 'exchangeRateGroup');
+    }
+
     fxStatus(html, type) {
         const el = document.getElementById('fxStatus');
         if (!el) return;
@@ -1598,7 +1623,8 @@ class FinanceManager {
                 const hora = isNaN(quando) ? '' : ` · ${quando.toLocaleDateString('pt-BR')} ${quando.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
                 return `<strong>1 ${r.moeda} = R$ ${fmt(Number(r.cotacao))}</strong> <small>${this.escapeHtml(r.fonte)}${hora}${r.desatualizado ? ' · pode estar desatualizada' : ''}</small>`;
             });
-            this.fxStatus(linhas.join('<br>') + ' <button type="button" class="fx-manual-link" onclick="financeManager.fxManual(true, null, true); document.getElementById(\'exchangeRate\')?.focus()">Usar outra cotação</button>', 'ok');
+            this.fxStatus(linhas.join('<br>') + ' <button type="button" class="fx-manual-link" onclick="financeManager.toggleFxManual()">Usar outra cotação</button>', 'ok');
+            this.fxLinkLabel();
         } catch (error) {
             if (seq !== this._fxSeq) return;
             if (de !== 'BRL' && para !== 'BRL') {

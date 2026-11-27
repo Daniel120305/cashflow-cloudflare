@@ -44,58 +44,7 @@ export async function fetchExchangeRate(moeda: string, get: typeof fetch = fetch
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     return (await r.json()) as any;
   };
-  // 1) AwesomeAPI: cotação comercial em tempo real (a mesma referência do Google).
-  try {
-    const q = (await tryJson(`https://economia.awesomeapi.com.br/json/last/${moeda}-BRL`))?.[`${moeda}BRL`];
-    const bid = Number(q?.bid);
-    if (!(bid > 0)) throw new Error("sem cotação");
-    const ts = Number(q?.timestamp);
-    return {
-      moeda,
-      cotacao: bid,
-      fonte: "AwesomeAPI (comercial)",
-      atualizado_em: ts > 0 ? new Date(ts * 1000).toISOString() : new Date().toISOString(),
-    };
-  } catch (e) {
-    errors.push(`AwesomeAPI: ${String((e as Error)?.message ?? e)}`);
-  }
-  // 2) Taxa de mercado (média) atualizada diariamente, servida por CDN.
-  const low = moeda.toLowerCase();
-  for (const url of [
-    `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/${low}.json`,
-    `https://latest.currency-api.pages.dev/v1/currencies/${low}.json`,
-  ]) {
-    try {
-      const j = await tryJson(url);
-      const v = Number(j?.[low]?.brl);
-      if (!(v > 0)) throw new Error("sem cotação");
-      return {
-        moeda,
-        cotacao: v,
-        avisos: [...errors],
-        fonte: "Mercado (média diária)",
-        atualizado_em: j?.date ? new Date(`${j.date}T12:00:00-03:00`).toISOString() : new Date().toISOString(),
-      };
-    } catch (e) {
-      errors.push(`currency-api: ${String((e as Error)?.message ?? e)}`);
-    }
-  }
-  // 3) ExchangeRate-API (sem chave), também taxa de mercado diária.
-  try {
-    const j = await tryJson(`https://open.er-api.com/v6/latest/${moeda}`);
-    const v = Number(j?.rates?.BRL);
-    if (j?.result !== "success" || !(v > 0)) throw new Error("sem cotação");
-    return {
-      moeda,
-      avisos: [...errors],
-      cotacao: v,
-      fonte: "ExchangeRate-API (mercado)",
-      atualizado_em: j?.time_last_update_unix ? new Date(j.time_last_update_unix * 1000).toISOString() : new Date().toISOString(),
-    };
-  } catch (e) {
-    errors.push(`ExchangeRate-API: ${String((e as Error)?.message ?? e)}`);
-  }
-  // 4) Banco Central (PTAX): referência oficial, última de venda dos últimos 10 dias.: última cotação de venda dos últimos 10 dias.
+  // 1) Banco Central (PTAX): referência oficial, última de venda dos últimos 10 dias.: última cotação de venda dos últimos 10 dias.
   try {
     const fim = new Date();
     const ini = new Date(fim.getTime() - 10 * 86400000);
@@ -116,6 +65,57 @@ export async function fetchExchangeRate(moeda: string, get: typeof fetch = fetch
     };
   } catch (e) {
     errors.push(`BCB PTAX: ${String((e as Error)?.message ?? e)}`);
+  }
+  // 2) AwesomeAPI: cotação comercial em tempo real (a mesma referência do Google).
+  try {
+    const q = (await tryJson(`https://economia.awesomeapi.com.br/json/last/${moeda}-BRL`))?.[`${moeda}BRL`];
+    const bid = Number(q?.bid);
+    if (!(bid > 0)) throw new Error("sem cotação");
+    const ts = Number(q?.timestamp);
+    return {
+      moeda,
+      cotacao: bid,
+      fonte: "AwesomeAPI (comercial)",
+      atualizado_em: ts > 0 ? new Date(ts * 1000).toISOString() : new Date().toISOString(),
+    };
+  } catch (e) {
+    errors.push(`AwesomeAPI: ${String((e as Error)?.message ?? e)}`);
+  }
+  // 3) Taxa de mercado (média) atualizada diariamente, servida por CDN.
+  const low = moeda.toLowerCase();
+  for (const url of [
+    `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/${low}.json`,
+    `https://latest.currency-api.pages.dev/v1/currencies/${low}.json`,
+  ]) {
+    try {
+      const j = await tryJson(url);
+      const v = Number(j?.[low]?.brl);
+      if (!(v > 0)) throw new Error("sem cotação");
+      return {
+        moeda,
+        cotacao: v,
+        avisos: [...errors],
+        fonte: "Mercado (média diária)",
+        atualizado_em: j?.date ? new Date(`${j.date}T12:00:00-03:00`).toISOString() : new Date().toISOString(),
+      };
+    } catch (e) {
+      errors.push(`currency-api: ${String((e as Error)?.message ?? e)}`);
+    }
+  }
+  // 4) ExchangeRate-API (sem chave), também taxa de mercado diária.
+  try {
+    const j = await tryJson(`https://open.er-api.com/v6/latest/${moeda}`);
+    const v = Number(j?.rates?.BRL);
+    if (j?.result !== "success" || !(v > 0)) throw new Error("sem cotação");
+    return {
+      moeda,
+      avisos: [...errors],
+      cotacao: v,
+      fonte: "ExchangeRate-API (mercado)",
+      atualizado_em: j?.time_last_update_unix ? new Date(j.time_last_update_unix * 1000).toISOString() : new Date().toISOString(),
+    };
+  } catch (e) {
+    errors.push(`ExchangeRate-API: ${String((e as Error)?.message ?? e)}`);
   }
   throw new Error(errors.join(" | "));
 }
