@@ -1162,9 +1162,6 @@ body {
     z-index: 9999;
 }
 
-.high-contrast {
-    filter: contrast(1.4);
-}
 
 .expense-alert {
     display: none;
@@ -2085,7 +2082,6 @@ body.theme-dark .cashbot-input-area input {
 /* Tema escuro: dropdown do usuário legível */
 body.theme-dark .user-dropdown,
 body.dark-theme .user-dropdown,
-body.high-contrast .user-dropdown,
 [data-theme="dark"] .user-dropdown {
     background: #111827 !important;
     border: 1px solid rgba(148, 163, 184, 0.34) !important;
@@ -2094,42 +2090,36 @@ body.high-contrast .user-dropdown,
 
 body.theme-dark .user-dropdown *,
 body.dark-theme .user-dropdown *,
-body.high-contrast .user-dropdown *,
 [data-theme="dark"] .user-dropdown * {
     color: #ffffff !important;
 }
 
 body.theme-dark .user-dropdown-label,
 body.dark-theme .user-dropdown-label,
-body.high-contrast .user-dropdown-label,
 [data-theme="dark"] .user-dropdown-label {
     color: #cbd5e1 !important;
 }
 
 body.theme-dark .user-name,
 body.dark-theme .user-name,
-body.high-contrast .user-name,
 [data-theme="dark"] .user-name {
     color: #f8fafc !important;
 }
 
 body.theme-dark .user-dropdown hr,
 body.dark-theme .user-dropdown hr,
-body.high-contrast .user-dropdown hr,
 [data-theme="dark"] .user-dropdown hr {
     border-top-color: rgba(148, 163, 184, 0.34) !important;
 }
 
 body.theme-dark .user-dropdown a,
 body.dark-theme .user-dropdown a,
-body.high-contrast .user-dropdown a,
 [data-theme="dark"] .user-dropdown a {
     color: #ffffff !important;
 }
 
 body.theme-dark .user-dropdown a:hover,
 body.dark-theme .user-dropdown a:hover,
-body.high-contrast .user-dropdown a:hover,
 [data-theme="dark"] .user-dropdown a:hover {
     background: rgba(37, 99, 235, 0.22) !important;
     color: #93c5fd !important;
@@ -2137,7 +2127,6 @@ body.high-contrast .user-dropdown a:hover,
 
 body.theme-dark .user-dropdown .logout,
 body.dark-theme .user-dropdown .logout,
-body.high-contrast .user-dropdown .logout,
 [data-theme="dark"] .user-dropdown .logout {
     color: #fca5a5 !important;
 }
@@ -2436,7 +2425,6 @@ body.dark-theme .balance-total,
 /* Dark mode para notificações */
 body.theme-dark .notification-dropdown,
 body.dark-theme .notification-dropdown,
-body.high-contrast .notification-dropdown,
 [data-theme="dark"] .notification-dropdown {
     background: #111827 !important;
     border-color: rgba(148, 163, 184, 0.34) !important;
@@ -2444,36 +2432,30 @@ body.high-contrast .notification-dropdown,
 
 body.theme-dark .notification-header,
 body.dark-theme .notification-header,
-body.high-contrast .notification-header,
 [data-theme="dark"] .notification-header {
     border-bottom-color: rgba(148, 163, 184, 0.34) !important;
 }
 
 body.theme-dark .notification-header strong,
 body.dark-theme .notification-header strong,
-body.high-contrast .notification-header strong,
 [data-theme="dark"] .notification-header strong,
 body.theme-dark .notification-item strong,
 body.dark-theme .notification-item strong,
-body.high-contrast .notification-item strong,
 [data-theme="dark"] .notification-item strong {
     color: #f8fafc !important;
 }
 
 body.theme-dark .notification-header span,
 body.dark-theme .notification-header span,
-body.high-contrast .notification-header span,
 [data-theme="dark"] .notification-header span,
 body.theme-dark .notification-item p,
 body.dark-theme .notification-item p,
-body.high-contrast .notification-item p,
 [data-theme="dark"] .notification-item p {
     color: #cbd5e1 !important;
 }
 
 body.theme-dark .notification-item,
 body.dark-theme .notification-item,
-body.high-contrast .notification-item,
 [data-theme="dark"] .notification-item {
     background: #020617 !important;
     border-color: rgba(148, 163, 184, 0.28) !important;
@@ -2481,7 +2463,6 @@ body.high-contrast .notification-item,
 
 body.theme-dark .notification-item-icon,
 body.dark-theme .notification-item-icon,
-body.high-contrast .notification-item-icon,
 [data-theme="dark"] .notification-item-icon {
     background: #111827 !important;
 }
@@ -3285,7 +3266,7 @@ body.theme-dark .user-avatar {
 .high-contrast .notification-trigger,
 .high-contrast .user-trigger { background: none !important; border: 0 !important; }
 .high-contrast .notification-icon,
-.high-contrast .user-avatar { background: #000 !important; border: 2px solid #fff !important; }
+.high-contrast .user-avatar { border: 2px solid var(--hc-line) !important; }
 
 /* ---------- Seletor de mês e ano (Relatórios e Taxas BCB) ---------- */
 .month-picker {
@@ -3456,3 +3437,18 @@ body.theme-dark .cashbot-cmds span { color: #cbd5e1; }
 /* CashBot: botão com ícone em SVG (logo do Telegram) */
 .cashbot-acao.cashbot-acao-ico { display: inline-flex; align-items: center; gap: 8px; }
 .cashbot-acao-ico .tg-logo-svg { width: 1.2em; height: 1.2em; flex: none; display: block; }
+
+/* Botão "Alto contraste" do painel: liga/desliga, visível nos dois temas */
+#highContrastPreset { border: 1.5px solid transparent !important; }
+#highContrastPreset[aria-pressed="true"] { background: #2563eb !important; color: #fff !important; }
+body.theme-dark #highContrastPreset { background: #1e293b !important; color: #f8fafc !important; border-color: #475569 !important; }
+body.theme-dark #highContrastPreset[aria-pressed="true"] { background: #2563eb !important; border-color: #93c5fd !important; }
+body.theme-dark #resetThemeSettings { background: #334155 !important; color: #f8fafc !important; }
+
+/* Tema escuro: valores das movimentações legíveis sobre o fundo verde/vermelho */
+body.theme-dark .transaction-amount.income { color: #4ade80 !important; }
+body.theme-dark .transaction-amount.expense { color: #fca5a5 !important; }
+body.theme-dark.high-contrast .transaction-amount.income { color: #86efac !important; }
+body.theme-dark.high-contrast .transaction-amount.expense { color: #fecaca !important; }
+body.theme-light.high-contrast .transaction-amount.income { color: #166534 !important; }
+body.theme-light.high-contrast .transaction-amount.expense { color: #b91c1c !important; }

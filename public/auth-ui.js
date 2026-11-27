@@ -5,8 +5,13 @@
     const salvo = JSON.parse(localStorage.getItem("cashflowThemeSettings") || "{}");
     const tema = salvo.theme || { automatico: "system", claro: "light", escuro: "dark" }[salvo.tema] || "system";
     const escuro = tema === "dark" || (tema === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+    const hc = !!(salvo.highContrast ?? salvo.altoContraste);
     document.documentElement.classList.add(escuro ? "theme-dark" : "theme-light");
-    const noBody = () => document.body?.classList.add(escuro ? "theme-dark" : "theme-light");
+    document.documentElement.classList.toggle("high-contrast", hc);
+    const noBody = () => {
+      document.body?.classList.add(escuro ? "theme-dark" : "theme-light");
+      document.body?.classList.toggle("high-contrast", hc);
+    };
     if (document.body) noBody();
     else document.addEventListener("DOMContentLoaded", noBody);
   } catch {

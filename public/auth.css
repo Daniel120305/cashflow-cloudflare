@@ -254,3 +254,65 @@ body.auth-page {
   }
 }
 .form-hint { font-size: 13px; line-height: 1.5; color: #475569; margin: 12px 0 4px; }
+
+/* ---------- Tema escuro: recuperação, redefinição, privacidade, confirmação e login ---------- */
+html.theme-dark { color-scheme: dark; }
+html.theme-dark {
+  --cf-text: #f1f5f9;
+  --cf-muted: #a3b1c6;
+  --cf-line: #334155;
+  --cf-error-bg: rgba(220, 38, 38, 0.14);
+}
+html.theme-dark body.auth-page {
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.28), transparent 42%),
+    linear-gradient(135deg, #070d1a, #13254d);
+}
+html.theme-dark .auth-card { background: #0f172a; color: var(--cf-text); border: 1px solid #1e293b; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5); }
+html.theme-dark .auth-card h1, html.theme-dark .auth-card h2, html.theme-dark .auth-card h3 { color: #f8fafc; }
+html.theme-dark .auth-card p, html.theme-dark .auth-card li, html.theme-dark .auth-lead { color: #cbd5e1; }
+html.theme-dark .auth-icon { background: #1e293b; }
+html.theme-dark .auth-done .auth-icon { background: rgba(22, 163, 74, 0.16); }
+html.theme-dark .auth-form label { color: #cbd5e1; }
+html.theme-dark .auth-form input[type="email"],
+html.theme-dark .auth-form input[type="password"],
+html.theme-dark .auth-form input[type="text"] { background: #111827; color: #f8fafc; border-color: #334155; }
+html.theme-dark .auth-form input:focus { background: #0b1220; border-color: #60a5fa; box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.18); }
+html.theme-dark .auth-links a, html.theme-dark .auth-card a { color: #93c5fd; }
+html.theme-dark .form-alert.error { color: #fecaca; border-color: #7f1d1d; }
+html.theme-dark .form-alert.success { background: rgba(22, 163, 74, 0.14); color: #bbf7d0; border-color: #166534; }
+html.theme-dark .form-alert.info { background: rgba(37, 99, 235, 0.14); color: #bfdbfe; border-color: #1e40af; }
+html.theme-dark .pw-toggle { color: #cbd5e1; }
+html.theme-dark .pw-toggle:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+html.theme-dark .pw-meter-bar { background: #334155; }
+html.theme-dark .pw-rules li.ok { color: #4ade80; }
+html.theme-dark .auth-divider { color: #94a3b8; }
+html.theme-dark .policy-dialog { background: #0f172a; color: #e5e7eb; border: 1px solid #1e293b; }
+html.theme-dark .policy-head { border-bottom-color: #1e293b; }
+html.theme-dark .policy-head h2 { color: #f8fafc; }
+html.theme-dark .policy-close { background: #1e293b; color: #f8fafc; }
+html.theme-dark .policy-dialog p, html.theme-dark .policy-dialog li { color: #cbd5e1; }
+
+/* Login: lado do formulário no tema escuro */
+html.theme-dark .login-side { background: rgba(10, 16, 32, 0.96); }
+html.theme-dark .login-header h2 { color: #f8fafc; }
+html.theme-dark .login-header p, html.theme-dark .checkbox-label, html.theme-dark .signup-link { color: #cbd5e1; }
+html.theme-dark .input-field { background: #111827; color: #f8fafc; border-color: #334155; }
+html.theme-dark .input-field:focus, html.theme-dark .input-field:not(:placeholder-shown) { background: #0b1220; border-color: #60a5fa; }
+html.theme-dark .floating-label, html.theme-dark .input-icon, html.theme-dark .password-toggle { color: #a3b1c6; }
+html.theme-dark .custom-checkbox { background: #111827; border-color: #475569; }
+html.theme-dark .forgot-link, html.theme-dark .signup-link a { color: #7cc4ff; }
+html.theme-dark .divider { color: #94a3b8; }
+html.theme-dark .divider::before { background: #334155; }
+html.theme-dark .error-message { background: rgba(220, 38, 38, 0.14); color: #fecaca; }
+html.theme-dark .success-message { background: rgba(22, 163, 74, 0.14); color: #bbf7d0; }
+
+/* Alto contraste nas telas de acesso */
+html.high-contrast .auth-card, html.high-contrast .login-card { border: 2px solid var(--hc-line); }
+html.high-contrast .auth-card p, html.high-contrast .auth-lead, html.high-contrast .login-header p,
+html.high-contrast .checkbox-label, html.high-contrast .signup-link, html.high-contrast .pw-rules li { color: var(--hc-soft) !important; }
+html.high-contrast .floating-label { color: var(--hc-soft) !important; }
+/* Links do login no tema claro com contraste suficiente (o azul-claro some no branco) */
+html:not(.theme-dark) .forgot-link, html:not(.theme-dark) .signup-link a { color: #1d63d6; }
+html.high-contrast:not(.theme-dark) .forgot-link, html.high-contrast:not(.theme-dark) .signup-link a { color: var(--hc-link); text-decoration: underline; }
+html.high-contrast.theme-dark .forgot-link, html.high-contrast.theme-dark .signup-link a { color: var(--hc-link); text-decoration: underline; }

@@ -155,3 +155,6 @@ h1 {
     justify-content: center;
   }
 }
+
+/* Link de contato legível no fundo escuro */
+a[href^="mailto:"] { color: #7cc4ff; text-underline-offset: 3px; }

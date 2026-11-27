@@ -238,6 +238,7 @@ function setupForm() {
                 const saved = JSON.parse(formData.get('preferencias'));
                 window.cashflowPreferences = saved;
                 document.body.classList.toggle('high-contrast', !!saved.highContrast);
+                document.documentElement.classList.toggle('high-contrast', !!saved.highContrast);
                 document.body.style.fontSize = `${saved.fontScale}%`;
 
                 const novoNome = formData.get("nome");

@@ -26,17 +26,20 @@ window.cashflowEscape = (value) => {
       if (Object.keys(prefs).length)
         localStorage.setItem("cashflowThemeSettings", JSON.stringify(prefs));
       document.body.classList.toggle("high-contrast", !!prefs.highContrast);
+      document.documentElement.classList.toggle("high-contrast", !!prefs.highContrast);
       if (prefs.fontScale) document.body.style.fontSize = `${prefs.fontScale}%`;
       if (prefs.theme) {
         document.body.classList.remove("theme-light", "theme-dark");
-        document.body.classList.add(
+        const t =
           "theme-" +
-            (prefs.theme === "system"
-              ? matchMedia("(prefers-color-scheme: dark)").matches
-                ? "dark"
-                : "light"
-              : prefs.theme),
-        );
+          (prefs.theme === "system"
+            ? matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light"
+            : prefs.theme);
+        document.body.classList.add(t);
+        document.documentElement.classList.remove("theme-light", "theme-dark");
+        document.documentElement.classList.add(t);
       }
     }
   } catch (error) {

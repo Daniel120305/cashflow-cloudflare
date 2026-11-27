@@ -617,6 +617,12 @@ class FinanceManager {
         const formatBRL = (v) =>
             'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
+        // Cores do texto do gráfico seguem o tema e o alto contraste.
+        const dark = document.body.classList.contains('theme-dark');
+        const hc = document.body.classList.contains('high-contrast');
+        const ink = hc ? (dark ? '#ffffff' : '#000000') : (dark ? '#cbd5e1' : '#334155');
+        const gridColor = dark ? (hc ? 'rgba(255,255,255,.35)' : 'rgba(148,163,184,.18)') : (hc ? 'rgba(0,0,0,.35)' : 'rgba(15,23,42,.08)');
+        const font = { weight: hc ? '700' : '500' };
         this._chart = new Chart(canvasNovo, {
             type: 'bar',
             data: {
@@ -652,7 +658,8 @@ class FinanceManager {
                 indexAxis: 'y',
                 plugins: {
                     legend: {
-                        position: 'top'
+                        position: 'top',
+                        labels: { color: ink, font }
                     },
                     tooltip: {
                         callbacks: {
@@ -670,12 +677,21 @@ class FinanceManager {
                 scales: {
                     y: {
                         stacked: true,
-                        grid: { display: false }
+                        grid: { display: false },
+                        ticks: { color: ink, font }
                     },
                     x: {
                         stacked: true,
+                        grid: { color: gridColor },
                         ticks: {
-                            callback: (value) => formatBRL(value)
+                            color: ink,
+                            font,
+                            // No celular: menos marcas e valores curtos, sem sobrepor.
+                            maxTicksLimit: container.clientWidth < 520 ? 4 : 8,
+                            maxRotation: 0,
+                            callback: (value) => container.clientWidth < 520 && Math.abs(value) >= 1000
+                                ? 'R$ ' + (value / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' mil'
+                                : formatBRL(value)
                         }
                     }
                 }
@@ -1981,7 +1997,8 @@ function initThemePanel() {
         theme: "auto",
         contrast: 100,
         brightness: 100,
-        fontScale: 100
+        fontScale: 100,
+        highContrast: false
     };
 
     const getSavedSettings = () => {
@@ -2015,6 +2032,13 @@ function initThemePanel() {
             const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
             body.classList.add(prefersDark ? "theme-dark" : "theme-light");
         }
+
+        // Alto contraste: o mesmo do Perfil (segue o tema claro/escuro).
+        const hc = !!(settings.highContrast ?? settings.altoContraste);
+        body.classList.toggle("high-contrast", hc);
+        root.classList.toggle("high-contrast", hc);
+        highContrastPreset?.setAttribute("aria-pressed", String(hc));
+        if (highContrastPreset) highContrastPreset.textContent = hc ? "✓ Alto contraste" : "Alto contraste";
 
         root.style.setProperty("--user-contrast", `${settings.contrast}%`);
         root.style.setProperty("--user-brightness", `${settings.brightness}%`);
@@ -2088,12 +2112,8 @@ function initThemePanel() {
     });
 
     highContrastPreset?.addEventListener("click", () => {
-        settings = {
-            theme: "dark",
-            contrast: 170,
-            brightness: 105,
-            fontScale: 110
-        };
+        settings = { ...settings, highContrast: !settings.highContrast };
+        delete settings.altoContraste;
         applySettings(settings);
         saveSettings(settings);
     });
@@ -2537,6 +2557,9 @@ function initThemePanel() {
     });
 })();
 
+// Ao trocar tema/alto contraste, redesenha o gráfico com as novas cores.
+new MutationObserver(() => { clearTimeout(window.__chartTheme); window.__chartTheme = setTimeout(() => window.financeManager?.updateChart?.(), 60); })
+    .observe(document.body, { attributes: true, attributeFilter: ['class'] });
 // Recarrega lançamentos feitos pelo bot, sem renovar a sessão por polling.
 setInterval(async()=>{if(document.visibilityState!=="visible"||!window.financeManager)return;try{await window.financeManager.loadTransactions();window.financeManager.updateDisplay();}catch(error){console.warn('Atualização financeira pendente.');}},30000);
 
