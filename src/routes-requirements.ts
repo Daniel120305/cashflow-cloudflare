@@ -15,6 +15,7 @@ import {
   saveTransaction,
   monthlySummary,
   quickExpense,
+  pickExpenseCategory,
   standardCategories,
 } from "./services/finance.js";
 export interface RequirementsOptions {
@@ -307,17 +308,15 @@ export async function requirementsRoutes(
       true,
     ),
   );
-  app.post("/api/transacoes/rapida", async (req) =>
-    saveTransaction(
-      db,
-      req.userId!,
-      quickExpense({
-        ...requestBody(req),
-        idempotency_key:
-          requestBody(req).idempotency_key ?? req.headers["idempotency-key"],
-      }),
-    ),
-  );
+  app.post("/api/transacoes/rapida", async (req) => {
+    const values = quickExpense({
+      ...requestBody(req),
+      idempotency_key: requestBody(req).idempotency_key ?? req.headers["idempotency-key"],
+    });
+    values.category = await pickExpenseCategory(db, req.userId!, values.description);
+    const saved = await saveTransaction(db, req.userId!, values);
+    return { ...saved, category: values.category };
+  });
   app.post("/api/consentimento", async (req) => {
     if (![true, "true", "on", "1"].includes(requestBody(req).aceito))
       throw new HttpError(400, "Confirme que leu o aviso de privacidade.");

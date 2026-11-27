@@ -164,13 +164,19 @@ class FinanceManager {
         this.transactionKey = null;
         for (const key of ['description','amount','category','type','date']) {
             if (key === 'category') this.filterCategoriesByType(transaction.type);
-            document.getElementById(key).value = key === 'date' ? String(transaction[key]).slice(0,10) : transaction[key];
+            document.getElementById(key).value = key === 'date' ? String(transaction[key]).slice(0,10)
+                : key === 'amount' ? Number(transaction[key]).toFixed(2) : transaction[key];
         }
         const form = document.getElementById('transactionForm');
+        const actions = form.querySelector('.form-actions') || form;
         if (!document.getElementById('cancelEdit')) {
             const cancel = document.createElement('button'); cancel.id = 'cancelEdit'; cancel.type = 'button';
-            cancel.textContent = 'Cancelar edição'; cancel.onclick = () => this.clearForm(); form.append(cancel);
+            cancel.className = 'btn-secondary btn-large';
+            cancel.textContent = 'Cancelar edição'; cancel.onclick = () => this.clearForm();
+            actions.prepend(cancel);
         }
+        const submit = form.querySelector('button[type="submit"]');
+        if (submit) { submit.dataset.texto ||= submit.textContent; submit.textContent = 'Salvar alterações'; }
         form.closest('.tab-content')?.classList.add('active');
         form.scrollIntoView({behavior:'smooth',block:'center'});
         document.getElementById('description').focus();
@@ -296,6 +302,8 @@ class FinanceManager {
     clearForm() {
         this.editingId = null;
         document.getElementById('cancelEdit')?.remove();
+        const submit = document.querySelector('#transactionForm button[type="submit"]');
+        if (submit?.dataset.texto) submit.textContent = submit.dataset.texto;
         document.getElementById('transactionForm')?.reset();
         document.getElementById('amountHint')?.remove();
         this.setTodayDate();
@@ -339,8 +347,39 @@ class FinanceManager {
         }, isError ? 5000 : 3000);
     }
 
+    // Confirmação dentro da página (no lugar do alerta do navegador).
+    confirmar({ titulo, texto, ok = 'Excluir', icone = '🗑️' }) {
+        return new Promise(resolve => {
+            if (typeof HTMLDialogElement === 'undefined') { resolve(window.confirm(titulo)); return; }
+            const dialog = document.createElement('dialog');
+            dialog.className = 'confirm-dialog';
+            dialog.setAttribute('aria-labelledby', 'confirmTituloSimples');
+            dialog.innerHTML = `
+                <form method="dialog" class="confirm-sheet">
+                    <div class="confirm-icon" aria-hidden="true">${icone}</div>
+                    <h3 id="confirmTituloSimples">${this.escapeHtml(titulo)}</h3>
+                    <p>${texto}</p>
+                    <div class="confirm-actions">
+                        <button type="button" class="confirm-cancel" data-acao="cancelar">Cancelar</button>
+                        <button type="submit" class="confirm-ok" data-acao="ok">${this.escapeHtml(ok)}</button>
+                    </div>
+                </form>`;
+            document.body.appendChild(dialog);
+            let confirmado = false;
+            dialog.querySelector('[data-acao="cancelar"]').addEventListener('click', () => dialog.close());
+            dialog.querySelector('form').addEventListener('submit', () => { confirmado = true; });
+            dialog.addEventListener('close', () => { dialog.remove(); resolve(confirmado); });
+            dialog.showModal();
+            dialog.querySelector('[data-acao="cancelar"]').focus();
+        });
+    }
+
     async deleteTransaction(id) {
-        if (!confirm('Tem certeza que deseja excluir esta transação?')) return;
+        const t = this.transactions.find(x => Number(x.id) === Number(id));
+        const detalhe = t
+            ? `<strong>${this.escapeHtml(t.description)}</strong> · ${this.formatCurrency(Number(t.amount))} · ${this.formatDate(String(t.date).slice(0, 10))}<br>Não dá para desfazer.`
+            : 'Não dá para desfazer.';
+        if (!(await this.confirmar({ titulo: 'Excluir esta transação?', texto: detalhe }))) return;
 
         const formData = new FormData();
         formData.append('id', id);
@@ -1565,13 +1604,30 @@ class FinanceManager {
         if (user !== undefined) this._fxManualUser = !!user;
         if (!open && this._fxManualUser) return;
         group.hidden = !open;
-        const de = document.getElementById('fromCurrency').value, para = document.getElementById('toCurrency').value;
-        const estrangeira = de === 'BRL' ? para : de;
+        const { label: texto, exemplo } = this.fxManualPergunta();
         const label = document.getElementById('exchangeRateLabel');
         const input = document.getElementById('exchangeRate');
-        if (label) label.textContent = `Cotação (quantos reais vale 1 ${estrangeira})`;
-        if (input) input.placeholder = `Ex.: 5,50 (1 ${estrangeira} = R$ 5,50)`;
+        if (label) label.textContent = texto;
+        if (input) input.placeholder = exemplo;
         if (open && motivo) this.fxStatus(motivo, 'warn');
+    }
+
+    // O que perguntar no campo manual: com real de um lado, "quantos reais vale
+    // 1 USD"; entre duas estrangeiras, "1 USD vale quantos JPY".
+    fxManualPergunta() {
+        const de = document.getElementById('fromCurrency')?.value, para = document.getElementById('toCurrency')?.value;
+        if (de === 'BRL' || para === 'BRL') {
+            const e = de === 'BRL' ? para : de;
+            return { modo: 'brl', estrangeira: e, label: `Cotação (quantos reais vale 1 ${e})`, exemplo: `Ex.: 5,50 (1 ${e} = R$ 5,50)` };
+        }
+        return { modo: 'cruzada', label: `Cotação (1 ${de} vale quantos ${para})`, exemplo: `Ex.: 1 ${de} = 0,92 ${para}` };
+    }
+
+    // Converte com a cotação digitada, para qualquer par de moedas.
+    fxConverterManual(amount, de, para, cot) {
+        if (de === 'BRL') return amount / cot;
+        if (para === 'BRL') return amount * cot;
+        return amount * cot; // 1 DE = cot PARA
     }
 
     // Alterna entre a cotação automática e uma digitada pela pessoa.
@@ -1623,15 +1679,15 @@ class FinanceManager {
                 const hora = isNaN(quando) ? '' : ` · ${quando.toLocaleDateString('pt-BR')} ${quando.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
                 return `<strong>1 ${r.moeda} = R$ ${fmt(Number(r.cotacao))}</strong> <small>${this.escapeHtml(r.fonte)}${hora}${r.desatualizado ? ' · pode estar desatualizada' : ''}</small>`;
             });
+            if (rates.length === 2) {
+                // Entre duas estrangeiras, mostra também a cotação direta.
+                const cruz = Number(rates[0].cotacao) / Number(rates[1].cotacao);
+                linhas.unshift(`<strong>1 ${de} = ${cruz.toLocaleString('pt-BR', { maximumFractionDigits: cruz < 1 ? 6 : 4 })} ${para}</strong> <small>calculado pelo real</small>`);
+            }
             this.fxStatus(linhas.join('<br>') + ' <button type="button" class="fx-manual-link" onclick="financeManager.toggleFxManual()">Usar outra cotação</button>', 'ok');
             this.fxLinkLabel();
         } catch (error) {
             if (seq !== this._fxSeq) return;
-            if (de !== 'BRL' && para !== 'BRL') {
-                this.fxStatus('Não consegui buscar a cotação agora. Para duas moedas estrangeiras, converta primeiro para Real (BRL).', 'warn');
-                this.fxManual(false);
-                return;
-            }
             this.fxManual(true, '⚠️ Não consegui buscar a cotação agora. Informe a cotação abaixo.');
         }
     }
@@ -1641,7 +1697,9 @@ class FinanceManager {
         const fromCurrency = document.getElementById('fromCurrency').value;
         const toCurrency = document.getElementById('toCurrency').value;
         const manualOpen = !document.getElementById('exchangeRateGroup')?.hidden;
-        const manual = parseFloat(String(document.getElementById('exchangeRate').value).replace(',', '.')) || 0;
+        const manualTxt = String(document.getElementById('exchangeRate').value || '').trim();
+        // Aceita "5,65", "5.65", "1.234,56" e "0,0361".
+        const manual = Number(/,/.test(manualTxt) ? manualTxt.replace(/\./g, '').replace(',', '.') : manualTxt) || 0;
 
         if (amount <= 0) {
             this.toolError('currencyResult', 'Informe um valor maior que zero.');
@@ -1651,27 +1709,25 @@ class FinanceManager {
         let convertedAmount;
         if (fromCurrency === toCurrency) {
             convertedAmount = amount;
-        } else if (manualOpen && manual > 0 && (fromCurrency === 'BRL' || toCurrency === 'BRL')) {
-            convertedAmount = fromCurrency === 'BRL' ? amount / manual : amount * manual;
+        } else if (manualOpen && manual > 0) {
+            convertedAmount = this.fxConverterManual(amount, fromCurrency, toCurrency, manual);
+        } else if (manualOpen && manualTxt) {
+            this.toolError('currencyResult', 'A cotação digitada não é um número válido. Ex.: 5,65');
+            return;
         } else {
             try {
                 // Reais por unidade de cada moeda (BRL = 1); converte passando pelo real.
                 const brl = async (m) => (m === 'BRL' ? 1 : Number((await this.fxRate(m)).cotacao));
                 const [a, b] = await Promise.all([brl(fromCurrency), brl(toCurrency)]);
                 convertedAmount = amount * a / b;
+                if (!(convertedAmount > 0) || !isFinite(convertedAmount)) throw new Error('cotação inválida');
             } catch {
-                if (fromCurrency !== 'BRL' && toCurrency !== 'BRL') {
-                    this.toolError('currencyResult', 'Cotação indisponível agora. Para duas moedas estrangeiras, converta primeiro para BRL.');
-                    return;
-                }
+                // Sem cotação automática: abre o campo manual (serve para qualquer par).
                 this.fxManual(true, '⚠️ Não consegui buscar a cotação agora. Informe a cotação abaixo.');
-                if (!(manual > 0)) {
-                    const estrangeira = fromCurrency === 'BRL' ? toCurrency : fromCurrency;
-                    this.toolError('currencyResult', `Informe a cotação: quantos reais vale 1 ${estrangeira}.`);
-                    document.getElementById('exchangeRate')?.focus();
-                    return;
-                }
-                convertedAmount = fromCurrency === 'BRL' ? amount / manual : amount * manual;
+                const { label } = this.fxManualPergunta();
+                this.toolError('currencyResult', `Informe a ${label.charAt(0).toLowerCase() + label.slice(1)}.`);
+                document.getElementById('exchangeRate')?.focus();
+                return;
             }
         }
         this.toolError('currencyResult', '');

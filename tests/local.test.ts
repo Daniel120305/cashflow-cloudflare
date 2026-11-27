@@ -105,6 +105,21 @@ test("transações, resumo, categorias e perfil", async () => {
   assert.equal((await api("POST", "/api/categorias", { nome: "Bônus", tipo: "income" })).status, 409);
   const cats = await api("GET", "/api/categorias");
   assert.equal(cats.data.categories.length, 1);
+  // Despesa rápida: categoria da pessoa pelo nome, depois histórico, depois sentido.
+  const pc = await api("POST", "/api/categorias", { nome: "PC", tipo: "expense" });
+  assert.equal(pc.status, 200, JSON.stringify(pc.data));
+  const rapida = async (texto: string) => (await api("POST", "/api/transacoes/rapida", { texto, idempotency_key: "q-" + texto + stamp })).data;
+  assert.equal((await rapida("NOVO PC GAMER 3.500,00")).category, "PC");
+  assert.equal((await rapida("mercado 35,90")).category, "alimentacao");
+  assert.equal((await rapida("Remédio da farmácia 22")).category, "saude");
+  assert.equal((await rapida("Netflix 55,90")).category, "lazer");
+  assert.equal((await rapida("Capinha 30")).category, "outros-despesas");
+  assert.equal((await rapida("teclado para os pcs 200")).category, "PC");
+  const todas = (await api("GET", "/api/transacoes")).data.transactions;
+  assert.equal(todas.find((t: any) => t.description === "NOVO PC GAMER").amount, 3500);
+  for (const t of todas.filter((t: any) => !["Salário", "Mercado"].includes(t.description)))
+    await api("POST", "/api/transacoes/excluir", { id: t.id });
+  await api("POST", "/api/categorias/excluir", { id: pc.data.id });
   const del = await api("POST", "/api/categorias/excluir", { id: cat.data.id });
   assert.equal(del.status, 200, JSON.stringify(del.data));
   const perfil = await api("POST", "/api/perfil", { cidade: "Brasília", estado: "DF" });

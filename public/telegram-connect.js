@@ -42,6 +42,11 @@
   .tgc-input:focus-within{border-color:#229ed9;box-shadow:0 0 0 3px rgba(34,158,217,.18)}
   .tgc-input span{color:#64748b;font-weight:700}
   .tgc-input input{flex:1;min-width:0;border:0;outline:0;padding:12px 6px;font-size:1rem;background:transparent;color:inherit}
+  /* O campo interno não ganha borda/anel próprios: quem mostra o foco é a caixa toda. */
+  .tgc-input input,.tgc-input input:focus,.tgc-input input:focus-visible{border:0!important;outline:none!important;box-shadow:none!important;background:transparent!important;min-height:0!important;border-radius:0!important}
+  :is(html,body).high-contrast.high-contrast .tgc-input input,:is(html,body).high-contrast.high-contrast .tgc-input input:focus{border:0!important;outline:none!important}
+  .high-contrast .tgc-input{border:2px solid var(--hc-line)!important}
+  .high-contrast .tgc-input:focus-within{outline:3px solid var(--hc-focus);outline-offset:2px;box-shadow:none}
   .tgc-hint{display:block;color:#64748b;font-size:.8rem;margin-top:6px;line-height:1.4}
   .tgc-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:50px;margin-top:14px;border:0;border-radius:12px;background:#229ed9;color:#fff;font-weight:800;font-size:1rem;text-decoration:none;cursor:pointer;box-sizing:border-box;padding:10px 16px;text-align:center}
   .tgc-btn:hover{background:#1b8cc2}

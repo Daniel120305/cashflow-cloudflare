@@ -43,15 +43,18 @@ document.addEventListener("DOMContentLoaded", () => {
       const status = document.getElementById("quickStatus");
       try {
         quickKey ||= crypto.randomUUID();
-        await cashflowRequest("/api/transacoes/rapida", {
+        const r = await cashflowRequest("/api/transacoes/rapida", {
           texto: document.getElementById("quickText").value,
           idempotency_key: quickKey,
         });
         quickKey = null;
         e.target.reset();
         status.dataset.type = "ok";
-        status.textContent =
-          "Despesa registrada. Você pode editar na lista de transações.";
+        const fm = window.financeManager;
+        const cat = r?.category ? (fm?.formatCategory?.(r.category) || r.category) : "";
+        status.textContent = cat
+          ? `✓ Despesa registrada em ${cat}. Você pode editar na lista de transações.`
+          : "✓ Despesa registrada. Você pode editar na lista de transações.";
         await window.financeManager.loadTransactions();
         window.financeManager.updateDisplay();
       } catch (error) {

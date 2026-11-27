@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import type { Database } from "../db.js";
 import { userDatabase } from "../db.js";
 import { HttpError, text, date, money, id } from "../validation.js";
+import { categoryFrom, norm } from "../integrations/conversa.js";
+import { classifyExpense } from "../integrations/receipt.js";
 export const standardCategories: Record<string, string> = {
   salario: "income",
   freelance: "income",
@@ -183,26 +185,57 @@ export async function saveTransaction(
 }
 export function quickExpense(input: Record<string, any>) {
   const raw = text(input.texto, "descrição e valor", 500);
-  const match = raw.match(/^(.*?)\s+(?:R\$\s*)?(\d+(?:[.,]\d{1,2})?)$/i);
+  // Valor no fim: "35,90", "35.90", "3.500,00", "R$ 1.200".
+  const match = raw.match(/^(.*?)\s+(?:R\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)$/i);
   if (!match)
     throw new HttpError(
       400,
       "Digite a descrição e o valor. Exemplo: mercado 35,90.",
     );
   const description = match[1].trim();
-  const category = /mercado|aliment|restaurante|padaria|lanche/i.test(
-    description,
-  )
-    ? "alimentacao"
-    : /uber|onibus|ônibus|gasolina|combust/i.test(description)
-      ? "transporte"
-      : "outros-despesas";
+  const valor = /\.\d{3}/.test(match[2]) || match[2].includes(",")
+    ? match[2].replace(/\./g, "").replace(",", ".")
+    : match[2];
   return {
     description,
-    amount: match[2],
-    category,
+    amount: valor,
+    category: guessExpenseCategory(description),
     type: "expense",
     date: localDate(),
     idempotency_key: input.idempotency_key,
   };
+}
+// Categoria padrão pelo sentido da descrição ("mercado" → alimentação).
+export function guessExpenseCategory(description: string) {
+  const slug = categoryFrom(description) ?? classifyExpense(description);
+  return standardCategories[slug] === "expense" ? slug : "outros-despesas";
+}
+// Escolhe a melhor categoria de despesa para a pessoa:
+// 1) uma categoria dela cujo nome aparece na descrição ("PC" em "novo PC gamer");
+// 2) a categoria usada antes numa despesa com a mesma descrição;
+// 3) a categoria padrão pelo sentido das palavras ("mercado" → Alimentação).
+export async function pickExpenseCategory(db: Database, uid: number, description: string) {
+  const d = ` ${norm(description).replace(/[^a-z0-9]+/g, " ").trim()} `;
+  const scoped = userDatabase(db, uid);
+  const mine = await scoped.query("SELECT nome FROM categorias WHERE usuario_id=$1 AND tipo='expense'", [uid]);
+  let best: { nome: string; len: number } | undefined;
+  for (const { nome } of mine.rows as { nome: string }[]) {
+    const n = norm(nome).replace(/[^a-z0-9]+/g, " ").trim();
+    if (!n) continue;
+    // Nome inteiro como palavra(s), aceitando plural simples ("pcs", "academias").
+    const hit = d.includes(` ${n} `) || d.includes(` ${n}s `) || (n.endsWith("s") && d.includes(` ${n.slice(0, -1)} `));
+    if (hit && (!best || n.length > best.len)) best = { nome, len: n.length };
+  }
+  if (best) return best.nome;
+  const before = await scoped.query(
+    "SELECT categoria FROM transacoes WHERE usuario_id=$1 AND tipo='expense' AND lower(trim(descricao))=lower(trim($2)) ORDER BY data_transacao DESC, id DESC LIMIT 1",
+    [uid, description],
+  );
+  const used = before.rows[0]?.categoria as string | undefined;
+  if (used && used !== "outros-despesas") {
+    if (standardCategories[used] === "expense") return used;
+    const ok = await scoped.query("SELECT 1 FROM categorias WHERE usuario_id=$1 AND tipo='expense' AND lower(nome)=lower($2)", [uid, used]);
+    if (ok.rows.length) return used;
+  }
+  return guessExpenseCategory(description);
 }
