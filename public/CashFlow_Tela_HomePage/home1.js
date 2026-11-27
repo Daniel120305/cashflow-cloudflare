@@ -1545,11 +1545,74 @@ class FinanceManager {
         document.getElementById('loanResult').style.display = 'block';
     }
 
-    convertCurrency() {
+    // Cotação automática (AwesomeAPI → Banco Central). Se as duas falharem,
+    // o campo de cotação manual aparece.
+    async fxRate(moeda) {
+        this._fx ||= {};
+        const hit = this._fx[moeda];
+        if (hit && Date.now() - hit.at < 5 * 60000) return hit.data;
+        const r = await fetch('/api/cambio?moeda=' + encodeURIComponent(moeda), { credentials: 'include' });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok || j.status !== 'success' || !(Number(j.cotacao) > 0)) throw new Error(j.message || 'Cotação indisponível');
+        this._fx[moeda] = { at: Date.now(), data: j };
+        return j;
+    }
+
+    fxManual(open, motivo) {
+        const group = document.getElementById('exchangeRateGroup');
+        if (!group) return;
+        group.hidden = !open;
+        const de = document.getElementById('fromCurrency').value, para = document.getElementById('toCurrency').value;
+        const estrangeira = de === 'BRL' ? para : de;
+        const label = document.getElementById('exchangeRateLabel');
+        const input = document.getElementById('exchangeRate');
+        if (label) label.textContent = `Cotação (quantos reais vale 1 ${estrangeira})`;
+        if (input) input.placeholder = `Ex.: 5,50 (1 ${estrangeira} = R$ 5,50)`;
+        if (open && motivo) this.fxStatus(motivo, 'warn');
+    }
+
+    fxStatus(html, type) {
+        const el = document.getElementById('fxStatus');
+        if (!el) return;
+        el.dataset.type = type || '';
+        el.innerHTML = html;
+    }
+
+    async refreshFx() {
+        const de = document.getElementById('fromCurrency')?.value, para = document.getElementById('toCurrency')?.value;
+        if (!de || !para) return;
+        const seq = (this._fxSeq = (this._fxSeq || 0) + 1);
+        if (de === para) { this.fxManual(false); this.fxStatus('', ''); return; }
+        const moedas = [de, para].filter((m) => m !== 'BRL');
+        this.fxStatus('<span class="fx-spin" aria-hidden="true"></span> Buscando cotação atual…', 'loading');
+        try {
+            const rates = await Promise.all(moedas.map((m) => this.fxRate(m)));
+            if (seq !== this._fxSeq) return;
+            this.fxManual(false);
+            const fmt = (v) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: v < 1 ? 4 : 2 });
+            const linhas = rates.map((r) => {
+                const quando = new Date(r.atualizado_em);
+                const hora = isNaN(quando) ? '' : ` · ${quando.toLocaleDateString('pt-BR')} ${quando.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+                return `<strong>1 ${r.moeda} = R$ ${fmt(Number(r.cotacao))}</strong> <small>${this.escapeHtml(r.fonte)}${hora}${r.desatualizado ? ' · pode estar desatualizada' : ''}</small>`;
+            });
+            this.fxStatus(linhas.join('<br>') + ' <button type="button" class="fx-manual-link" onclick="financeManager.fxManual(true)">Usar outra cotação</button>', 'ok');
+        } catch (error) {
+            if (seq !== this._fxSeq) return;
+            if (de !== 'BRL' && para !== 'BRL') {
+                this.fxStatus('Não consegui buscar a cotação agora. Para duas moedas estrangeiras, converta primeiro para Real (BRL).', 'warn');
+                this.fxManual(false);
+                return;
+            }
+            this.fxManual(true, '⚠️ Não consegui buscar a cotação agora. Informe a cotação abaixo.');
+        }
+    }
+
+    async convertCurrency() {
         const amount = this.lerValor('amountToConvert') || 0;
         const fromCurrency = document.getElementById('fromCurrency').value;
         const toCurrency = document.getElementById('toCurrency').value;
-        const exchangeRate = parseFloat(document.getElementById('exchangeRate').value) || 0;
+        const manualOpen = !document.getElementById('exchangeRateGroup')?.hidden;
+        const manual = parseFloat(String(document.getElementById('exchangeRate').value).replace(',', '.')) || 0;
 
         if (amount <= 0) {
             this.toolError('currencyResult', 'Informe um valor maior que zero.');
@@ -1558,17 +1621,29 @@ class FinanceManager {
 
         let convertedAmount;
         if (fromCurrency === toCurrency) {
-            // Mesma moeda: não precisa de cotação.
             convertedAmount = amount;
-        } else if (fromCurrency !== 'BRL' && toCurrency !== 'BRL') {
-            this.toolError('currencyResult', 'Converta entre Real (BRL) e outra moeda. Para duas moedas estrangeiras, converta primeiro para BRL.');
-            return;
-        } else if (exchangeRate <= 0) {
-            const estrangeira = fromCurrency === 'BRL' ? toCurrency : fromCurrency;
-            this.toolError('currencyResult', `Informe a cotação: quantos reais vale 1 ${estrangeira}.`);
-            return;
+        } else if (manualOpen && manual > 0 && (fromCurrency === 'BRL' || toCurrency === 'BRL')) {
+            convertedAmount = fromCurrency === 'BRL' ? amount / manual : amount * manual;
         } else {
-            convertedAmount = fromCurrency === 'BRL' ? amount / exchangeRate : amount * exchangeRate;
+            try {
+                // Reais por unidade de cada moeda (BRL = 1); converte passando pelo real.
+                const brl = async (m) => (m === 'BRL' ? 1 : Number((await this.fxRate(m)).cotacao));
+                const [a, b] = await Promise.all([brl(fromCurrency), brl(toCurrency)]);
+                convertedAmount = amount * a / b;
+            } catch {
+                if (fromCurrency !== 'BRL' && toCurrency !== 'BRL') {
+                    this.toolError('currencyResult', 'Cotação indisponível agora. Para duas moedas estrangeiras, converta primeiro para BRL.');
+                    return;
+                }
+                this.fxManual(true, '⚠️ Não consegui buscar a cotação agora. Informe a cotação abaixo.');
+                if (!(manual > 0)) {
+                    const estrangeira = fromCurrency === 'BRL' ? toCurrency : fromCurrency;
+                    this.toolError('currencyResult', `Informe a cotação: quantos reais vale 1 ${estrangeira}.`);
+                    document.getElementById('exchangeRate')?.focus();
+                    return;
+                }
+                convertedAmount = fromCurrency === 'BRL' ? amount / manual : amount * manual;
+            }
         }
         this.toolError('currencyResult', '');
 
@@ -2557,6 +2632,14 @@ function initThemePanel() {
     });
 })();
 
+// Conversor de moedas: busca a cotação ao abrir Ferramentas e ao trocar as moedas.
+document.addEventListener('change', (e) => {
+    if (e.target?.id === 'fromCurrency' || e.target?.id === 'toCurrency') window.financeManager?.refreshFx?.();
+});
+document.addEventListener('click', (e) => {
+    if (e.target?.closest?.('[data-tab="tools"]')) setTimeout(() => window.financeManager?.refreshFx?.(), 50);
+});
+if (document.getElementById('tools')?.classList.contains('active')) setTimeout(() => window.financeManager?.refreshFx?.(), 300);
 // Ao trocar tema/alto contraste, redesenha o gráfico com as novas cores.
 new MutationObserver(() => { clearTimeout(window.__chartTheme); window.__chartTheme = setTimeout(() => window.financeManager?.updateChart?.(), 60); })
     .observe(document.body, { attributes: true, attributeFilter: ['class'] });

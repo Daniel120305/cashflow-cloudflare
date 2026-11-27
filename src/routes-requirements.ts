@@ -31,11 +31,78 @@ export const requestBody = (req: Req): Record<string, any> => {
 };
 // Cache das taxas do BCB por instância do Worker (sobrevive entre requisições).
 const ratesCache = new Map<string, { at: number; data: any }>();
+// Cotações de câmbio (reais por 1 unidade da moeda), por 5 minutos.
+const fxCache = new Map<string, { at: number; data: any }>();
+export const FX_CURRENCIES = ["USD", "EUR", "GBP", "ARS", "CAD", "AUD", "JPY", "CHF", "CNY"];
+const brDate = (d: Date) => `${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}-${d.getUTCFullYear()}`;
+export async function fetchExchangeRate(moeda: string, get: typeof fetch = fetch) {
+  const errors: string[] = [];
+  // 1) AwesomeAPI: cotação comercial em tempo real (gratuita, sem chave).
+  try {
+    const r = await get(`https://economia.awesomeapi.com.br/json/last/${moeda}-BRL`, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j = (await r.json()) as any;
+    const q = j?.[`${moeda}BRL`];
+    const bid = Number(q?.bid);
+    if (!(bid > 0)) throw new Error("sem cotação");
+    const ts = Number(q?.timestamp);
+    return {
+      moeda,
+      cotacao: bid,
+      fonte: "AwesomeAPI (comercial)",
+      atualizado_em: ts > 0 ? new Date(ts * 1000).toISOString() : new Date().toISOString(),
+    };
+  } catch (e) {
+    errors.push(`AwesomeAPI: ${String((e as Error)?.message ?? e)}`);
+  }
+  // 2) Banco Central (PTAX): última cotação de venda dos últimos 10 dias.
+  try {
+    const fim = new Date();
+    const ini = new Date(fim.getTime() - 10 * 86400000);
+    const url =
+      "https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoMoedaPeriodo(moeda=@moeda,dataInicial=@dataInicial,dataFinalCotacao=@dataFinalCotacao)" +
+      `?@moeda='${moeda}'&@dataInicial='${brDate(ini)}'&@dataFinalCotacao='${brDate(fim)}'&$top=100&$format=json`;
+    const r = await get(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(8000) });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const rows = (((await r.json()) as any)?.value ?? []) as any[];
+    const last = rows.filter((x) => Number(x?.cotacaoVenda) > 0).sort((a, b) => String(a.dataHoraCotacao).localeCompare(String(b.dataHoraCotacao))).at(-1);
+    if (!last) throw new Error("sem cotação");
+    return {
+      moeda,
+      cotacao: Number(last.cotacaoVenda),
+      fonte: "Banco Central (PTAX)",
+      atualizado_em: new Date(String(last.dataHoraCotacao).replace(" ", "T") + "-03:00").toISOString(),
+    };
+  } catch (e) {
+    errors.push(`BCB PTAX: ${String((e as Error)?.message ?? e)}`);
+  }
+  throw new Error(errors.join(" | "));
+}
 export async function requirementsRoutes(
   app: App,
   db: Database,
   options: RequirementsOptions,
 ) {
+  app.get("/api/cambio", async (req, reply) => {
+    const moeda = String((req.query as any)?.moeda ?? "").toUpperCase();
+    if (!FX_CURRENCIES.includes(moeda)) throw new HttpError(400, "Moeda não suportada.");
+    const hit = fxCache.get(moeda);
+    if (hit && Date.now() - hit.at < 5 * 60000) return { status: "success", ...hit.data };
+    try {
+      const data = await fetchExchangeRate(moeda, options.externalFetch ?? fetch);
+      fxCache.set(moeda, { at: Date.now(), data });
+      return { status: "success", ...data };
+    } catch (error) {
+      req.log.warn("Cotação indisponível", String((error as Error)?.message ?? error));
+      // Cotação antiga (até 12 h) ainda serve, avisando que pode estar defasada.
+      if (hit && Date.now() - hit.at < 12 * 3600000) return { status: "success", ...hit.data, desatualizado: true };
+      reply.code(503);
+      return { status: "error", message: "Não foi possível buscar a cotação agora. Informe a cotação manualmente." };
+    }
+  });
   app.get("/api/mercado/taxas", async (req, reply) => {
     const now = new Date();
     now.setUTCDate(1);

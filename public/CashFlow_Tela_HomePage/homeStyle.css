@@ -3452,3 +3452,19 @@ body.theme-dark.high-contrast .transaction-amount.income { color: #86efac !impor
 body.theme-dark.high-contrast .transaction-amount.expense { color: #fecaca !important; }
 body.theme-light.high-contrast .transaction-amount.income { color: #166534 !important; }
 body.theme-light.high-contrast .transaction-amount.expense { color: #b91c1c !important; }
+
+/* Conversor de moedas: cotação automática */
+.fx-status { margin: 4px 0 14px; padding: 10px 12px; border-radius: 12px; font-size: 0.9rem; line-height: 1.5; background: #eff6ff; color: #1e3a8a; border: 1px solid #bfdbfe; }
+.fx-status:empty { display: none; }
+.fx-status small { display: inline; color: #475569; font-weight: 600; }
+.fx-status[data-type="warn"] { background: #fffbeb; color: #92400e; border-color: #fde68a; }
+.fx-status[data-type="loading"] { background: transparent; border-style: dashed; color: #475569; }
+.fx-manual-link { display: inline; margin-left: 4px; padding: 0; border: 0; background: none !important; color: #2563eb; font-weight: 700; text-decoration: underline; cursor: pointer; box-shadow: none !important; min-height: 0 !important; font-size: inherit; }
+.fx-spin { display: inline-block; width: 12px; height: 12px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; vertical-align: -1px; animation: fxspin .8s linear infinite; }
+@keyframes fxspin { to { transform: rotate(360deg); } }
+body.theme-dark .fx-status { background: rgba(37, 99, 235, 0.14); color: #dbeafe; border-color: rgba(96, 165, 250, 0.35); }
+body.theme-dark .fx-status small { color: #cbd5e1; }
+body.theme-dark .fx-status[data-type="warn"] { background: rgba(217, 119, 6, 0.14); color: #fde68a; border-color: rgba(251, 191, 36, 0.35); }
+body.theme-dark .fx-status[data-type="loading"] { background: transparent; color: #cbd5e1; }
+body.theme-dark .fx-manual-link { color: #93c5fd; }
+#exchangeRateGroup[hidden] { display: none !important; }

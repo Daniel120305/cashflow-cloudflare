@@ -409,7 +409,7 @@
 
                         <div class="tool-card">
                             <h3>💱 Conversor de Moedas</h3>
-                            <p>Converta valores entre moedas com base na taxa informada.</p>
+                            <p>Converta valores entre moedas com a cotação atual, buscada automaticamente.</p>
 
                             <div class="form-group">
                                 <label for="amountToConvert">Valor</label>
@@ -423,6 +423,10 @@
                                     <option value="USD">Dólar (USD)</option>
                                     <option value="EUR">Euro (EUR)</option>
                                     <option value="GBP">Libra (GBP)</option>
+                                    <option value="ARS">Peso argentino (ARS)</option>
+                                    <option value="CAD">Dólar canadense (CAD)</option>
+                                    <option value="JPY">Iene (JPY)</option>
+                                    <option value="CHF">Franco suíço (CHF)</option>
                                 </select>
                             </div>
 
@@ -433,10 +437,16 @@
                                     <option value="BRL">Real (BRL)</option>
                                     <option value="EUR">Euro (EUR)</option>
                                     <option value="GBP">Libra (GBP)</option>
+                                    <option value="ARS">Peso argentino (ARS)</option>
+                                    <option value="CAD">Dólar canadense (CAD)</option>
+                                    <option value="JPY">Iene (JPY)</option>
+                                    <option value="CHF">Franco suíço (CHF)</option>
                                 </select>
                             </div>
 
-                            <div class="form-group">
+                            <div id="fxStatus" class="fx-status" role="status" aria-live="polite"></div>
+
+                            <div class="form-group" id="exchangeRateGroup" hidden>
                                 <label for="exchangeRate" id="exchangeRateLabel">Cotação (quantos reais vale 1 unidade da moeda estrangeira)</label>
                                 <input type="number" id="exchangeRate" step="0.0001" min="0" placeholder="Ex.: 5,50 (1 USD = R$ 5,50)">
                             </div>
