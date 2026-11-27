@@ -7,6 +7,8 @@ import {
   requestReset,
   resetPassword,
   deleteAccount,
+  changePassword,
+  requestOwnReset,
   tokenHash,
 } from "./services/accounts.js";
 import {
@@ -111,6 +113,12 @@ export async function requirementsRoutes(
   );
   app.post("/api/senha/redefinir", limited, async (req) =>
     resetPassword(db, requestBody(req)),
+  );
+  app.post("/api/senha/alterar", limited, async (req) =>
+    changePassword(db, req.userId!, requestBody(req), req.cookies.cashflow_session ?? ""),
+  );
+  app.post("/api/senha/link", limited, async (req) =>
+    requestOwnReset(db, req.userId!, options.sendReset),
   );
   app.post("/api/session/atividade", async (req) => {
     await db.query(

@@ -144,6 +144,30 @@ test("recuperação de senha de ponta a ponta", async () => {
   assert.equal((await api("POST", "/api/login", { email: legacyEmail, senha: "NovaSenha@789" })).status, 200);
 });
 
+test("alterar senha pelo Perfil: exige a atual, mantém esta sessão e derruba as outras", async () => {
+  const a = client(), b = client();
+  assert.equal((await a("POST", "/api/login", { email: legacyEmail, senha: "NovaSenha@789" })).status, 200);
+  assert.equal((await b("POST", "/api/login", { email: legacyEmail, senha: "NovaSenha@789" })).status, 200);
+  assert.equal((await a("GET", "/api/perfil")).data.dados.temSenha, true);
+  assert.equal((await a("POST", "/api/senha/alterar", { senha_atual: "errada", nova_senha: "Outra@1234", confirmar_senha: "Outra@1234" })).status, 401);
+  assert.match((await a("POST", "/api/senha/alterar", { senha_atual: "NovaSenha@789", nova_senha: "fraca", confirmar_senha: "fraca" })).data.message, /Senha fraca/);
+  assert.match((await a("POST", "/api/senha/alterar", { senha_atual: "NovaSenha@789", nova_senha: "Outra@1234", confirmar_senha: "Outra@9999" })).data.message, /não coincidem/);
+  const ok = await a("POST", "/api/senha/alterar", { senha_atual: "NovaSenha@789", nova_senha: "Outra@1234", confirmar_senha: "Outra@1234" });
+  assert.equal(ok.status, 200, JSON.stringify(ok.data));
+  assert.equal((await a("GET", "/api/perfil")).status, 200); // esta sessão continua
+  assert.equal((await b("GET", "/api/perfil")).status, 401); // o outro aparelho saiu
+  assert.equal((await client()("POST", "/api/login", { email: legacyEmail, senha: "Outra@1234" })).status, 200);
+  // Link para o próprio email, sem precisar digitar o endereço.
+  const n = logs.length;
+  const link = await a("POST", "/api/senha/link", {});
+  assert.equal(link.status, 200);
+  assert.match(link.data.message, /Enviamos um link para .+•.*@/);
+  assert.ok(logs.slice(n).some((l) => l.includes("/redefinir-senha?") && l.includes(legacyEmail)));
+  assert.equal((await client()("POST", "/api/senha/alterar", {})).status, 401); // sem sessão
+  // Volta a senha usada pelos testes seguintes.
+  assert.equal((await a("POST", "/api/senha/alterar", { senha_atual: "Outra@1234", nova_senha: "NovaSenha@789", confirmar_senha: "NovaSenha@789" })).status, 200);
+});
+
 test("segurança: origem de outro site, sem sessão e limite de tentativas", async () => {
   const api = client();
   const evil = await api("POST", "/api/login", { email: legacyEmail, senha: "x" }, { origin: "https://site-malicioso.com" });

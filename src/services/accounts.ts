@@ -73,6 +73,45 @@ export async function resetPassword(db: Database, b: Record<string, any>) {
     };
   });
 }
+// Troca de senha com a sessão aberta (Perfil). Exige a senha atual quando a
+// conta tem uma; contas só do Google criam a senha pelo link enviado por email.
+export async function changePassword(
+  db: Database,
+  uid: number,
+  b: Record<string, any>,
+  currentSession: string,
+) {
+  const user = (await db.query("SELECT senha FROM usuarios WHERE id=$1", [uid])).rows[0];
+  if (!user) throw new HttpError(404, "Usuário não encontrado.");
+  if (!user.senha)
+    throw new HttpError(400, "Sua conta entra pelo Google e ainda não tem senha. Use \"Enviar link por email\" para criar uma.");
+  text(b.senha_atual, "senha atual", 1024);
+  if (!(await checkPassword(db, b.senha_atual, user.senha)))
+    throw new HttpError(401, "Senha atual incorreta.");
+  const nova = newPassword({ senha: b.nova_senha, confirmar_senha: b.confirmar_senha });
+  if (nova === b.senha_atual) throw new HttpError(400, "A nova senha precisa ser diferente da atual.");
+  const hash = await hashPassword(db, nova);
+  await db.transaction(async (tx) => {
+    await tx.query("UPDATE usuarios SET senha=$1 WHERE id=$2", [hash, uid]);
+    // Encerra os outros aparelhos; esta sessão continua aberta.
+    await tx.query("DELETE FROM sessoes WHERE usuario_id=$1 AND token_hash<>$2", [uid, tokenHash(currentSession)]);
+    await tx.query("DELETE FROM recuperacoes_senha WHERE usuario_id=$1", [uid]);
+  });
+  return { status: "success", message: "Senha alterada. Os outros aparelhos conectados foram desconectados." };
+}
+// Link de redefinição para o email da própria conta (esqueceu a atual ou conta Google).
+export async function requestOwnReset(
+  db: Database,
+  uid: number,
+  send?: (email: string, token: string) => Promise<void>,
+) {
+  const e = (await db.query("SELECT email FROM usuarios WHERE id=$1", [uid])).rows[0]?.email as string | undefined;
+  if (!e) throw new HttpError(404, "Usuário não encontrado.");
+  await requestReset(db, e, send);
+  const [nome, dominio] = e.split("@");
+  const oculto = `${nome.slice(0, 2)}${"•".repeat(Math.max(1, Math.min(6, nome.length - 2)))}@${dominio}`;
+  return { status: "success", message: `Enviamos um link para ${oculto}. Ele vale por 15 minutos; veja também o spam.` };
+}
 export async function deleteAccount(
   db: Database,
   uid: number,

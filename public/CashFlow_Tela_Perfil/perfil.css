@@ -984,3 +984,51 @@ body.theme-dark select option { background: #0f172a; color: #e5e7eb; }
 body.theme-dark .tg-profile-card { background: linear-gradient(135deg, #0c4a6e, #0f172a 70%); border-color: #075985; }
 body.theme-dark .tg-profile-txt h2 { color: #e2e8f0; }
 body.theme-dark .tg-profile-txt p { color: #cbd5e1; }
+
+/* Alterar senha (Privacidade e conta) */
+.account-password { margin-top: 18px; border-top: 1px dashed #dbe3ee; padding-top: 14px; }
+.account-password summary { color: #2563eb; font-weight: 800; padding: 6px 0; list-style: none; cursor: pointer; }
+.account-password summary::-webkit-details-marker { display: none; }
+.account-password summary::before { content: "▸ "; }
+.account-password[open] summary::before { content: "▾ "; }
+.account-card #changePassword, .account-card .pw-google {
+    display: flex; flex-direction: column; align-items: stretch; gap: 8px;
+    margin-top: 8px; padding: 16px; border: 1.5px solid #bfdbfe; border-radius: 14px; background: #eff6ff;
+}
+.account-card #changePassword[hidden], .account-card .pw-google[hidden] { display: none; }
+.account-card #changePassword label { font-weight: 700; font-size: 0.9rem; color: #1e3a8a; }
+.account-card #changePassword input[type=password], .account-card #changePassword input[type=text] {
+    width: 100%; box-sizing: border-box; min-height: 46px; padding: 10px 14px; border-radius: 12px; border: 1.5px solid #bfdbfe; font: inherit;
+}
+.pw-intro, .pw-google p { margin: 0 0 4px; font-size: 0.88rem; color: #475569; line-height: 1.45; }
+.pw-rules { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.pw-rules li { font-size: 0.78rem; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: #e2e8f0; color: #475569; }
+.pw-rules li::before { content: "○ "; }
+.pw-rules li.ok { background: #dcfce7; color: #166534; }
+.pw-rules li.ok::before { content: "✓ "; }
+.account-card .pw-show { display: flex; align-items: center; gap: 8px; font-weight: 600 !important; }
+.pw-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 4px; }
+.account-card .pw-actions button[type=submit], .account-card .pw-google button {
+    min-height: 46px; padding: 0 22px; border: 0; border-radius: 12px; background: #2563eb; color: #fff; font-weight: 800; cursor: pointer;
+}
+.account-card .pw-link { background: none; border: 0; color: #2563eb; font-weight: 700; text-decoration: underline; cursor: pointer; padding: 8px 4px; }
+.account-card .pw-actions button:disabled, .account-card .pw-google button:disabled { opacity: .6; cursor: default; }
+#passwordStatus:empty { display: none; }
+body.theme-dark .account-password { border-top-color: #334155; }
+body.theme-dark .account-password summary { color: #93c5fd; }
+body.theme-dark .account-card #changePassword, body.theme-dark .account-card .pw-google { background: #0b1730; border-color: #1e3a8a; }
+body.theme-dark .account-card #changePassword label { color: #bfdbfe; }
+body.theme-dark .account-card #changePassword input[type=password], body.theme-dark .account-card #changePassword input[type=text] { background: #111827; color: #f8fafc; border-color: #1e3a8a; }
+body.theme-dark .pw-intro, body.theme-dark .pw-google p { color: #cbd5e1; }
+body.theme-dark .pw-rules li { background: #1e293b; color: #cbd5e1; }
+body.theme-dark .pw-rules li.ok { background: rgba(22,163,74,.2); color: #86efac; }
+body.theme-dark .account-card .pw-link { color: #93c5fd; }
+@media (max-width: 768px) {
+    .pw-actions { flex-direction: column; align-items: stretch; }
+    .account-card .pw-actions button[type=submit], .account-card .pw-google button { width: 100%; }
+}
+.account-card button.pw-link {
+    background: none !important; box-shadow: none !important; color: #2563eb; min-height: 0;
+    padding: 8px 4px !important; font-size: 0.92rem; text-decoration: underline; text-underline-offset: 3px;
+}
+body.theme-dark .account-card button.pw-link { color: #93c5fd; }

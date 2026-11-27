@@ -449,6 +449,8 @@ export async function buildApp(
     if (!r.rows[0]) throw new HttpError(404, "Usuário não encontrado.");
     const dados = r.rows[0];
     dados.emailConfirmado = Boolean(dados.preferencias?.emailConfirmadoEm);
+    const senha = await db.query("SELECT (senha IS NOT NULL AND senha<>'') AS tem FROM usuarios WHERE id=$1", [req.userId]);
+    dados.temSenha = senha.rows[0]?.tem === true;
     return success({ dados });
   });
   app.post("/api/perfil", async (req) => {

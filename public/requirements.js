@@ -235,6 +235,16 @@ document.addEventListener("DOMContentLoaded", () => {
       '<p class="account-lead">Veja como seus dados são usados e gerencie seu consentimento.</p>' +
       '<a class="account-link" href="/privacidade">📄 Política de privacidade e uso dos dados<span aria-hidden="true">›</span></a>' +
       '<form id="consentForm" class="account-consent"><label class="account-check"><input type="checkbox" id="acceptPrivacy" required><span>Li e aceito o tratamento descrito na política</span></label><button type="submit">Registrar consentimento</button></form>' +
+      '<details class="account-password" id="passwordBox"><summary><span aria-hidden="true">🔑</span> Alterar senha</summary>' +
+      '<form id="changePassword" novalidate><p class="pw-intro">Depois de trocar, os outros aparelhos conectados saem da conta. Este continua conectado.</p>' +
+      '<label for="pwCurrent">Senha atual</label><input id="pwCurrent" type="password" autocomplete="current-password" required>' +
+      '<label for="pwNew">Nova senha</label><input id="pwNew" type="password" autocomplete="new-password" required>' +
+      '<ul class="pw-rules" aria-live="polite"><li data-rule="len">8+ caracteres</li><li data-rule="up">Maiúscula</li><li data-rule="low">Minúscula</li><li data-rule="num">Número</li><li data-rule="sym">Símbolo</li></ul>' +
+      '<label for="pwConfirm">Confirmar nova senha</label><input id="pwConfirm" type="password" autocomplete="new-password" required>' +
+      '<label class="pw-show"><input type="checkbox" id="pwShow"> Mostrar senhas</label>' +
+      '<div class="pw-actions"><button type="submit">Salvar nova senha</button><button type="button" class="pw-link" data-pw-link>Esqueci a senha atual</button></div></form>' +
+      '<div id="googlePassword" class="pw-google" hidden><p>Você entra com o Google, então sua conta ainda não tem senha. Para também poder entrar com email e senha, envie um link para o seu email e crie uma.</p><button type="button" data-pw-link>Enviar link por email</button></div>' +
+      '<p id="passwordStatus" class="account-status" role="status"></p></details>' +
       '<details class="account-danger"><summary>Excluir minha conta</summary><p>A exclusão remove permanentemente sua conta e os dados financeiros associados. Não é possível desfazer.</p><form id="deleteAccount"><label for="deletePassword">Senha atual <small>(contas criadas pelo Google podem deixar em branco)</small></label><input id="deletePassword" type="password" autocomplete="current-password"><label for="deleteConfirmation">Digite EXCLUIR para confirmar</label><input id="deleteConfirmation" pattern="EXCLUIR" required autocapitalize="characters"><button type="submit">Excluir conta permanentemente</button></form></details>' +
       '<p id="privacyStatus" class="account-status" role="status"></p>';
     profile.after(section);
@@ -258,6 +268,11 @@ document.addEventListener("DOMContentLoaded", () => {
       .then((r) => (r.ok ? r.json() : null))
       .then((r) => {
         if (r?.dados?.consentimento_em) showConsent(r.dados.consentimento_em);
+        if (r?.dados && r.dados.temSenha === false) {
+          document.getElementById("changePassword").hidden = true;
+          document.getElementById("googlePassword").hidden = false;
+          document.querySelector("#passwordBox summary").lastChild.textContent = " Criar senha";
+        }
       })
       .catch(() => {});
     document.getElementById("consentForm").onsubmit = async (e) => {
@@ -270,6 +285,58 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById("privacyStatus").textContent = error.message;
       }
     };
+    // Alterar senha: regras ao vivo, envio e link por email.
+    const pwStatus = (msg, type) => {
+      const el = document.getElementById("passwordStatus");
+      el.dataset.type = type;
+      el.textContent = msg;
+    };
+    const pwRules = {
+      len: (v) => v.length >= 8,
+      up: (v) => /\p{Lu}/u.test(v),
+      low: (v) => /\p{Ll}/u.test(v),
+      num: (v) => /\p{Nd}/u.test(v),
+      sym: (v) => /[^\p{L}\p{Nd}]/u.test(v),
+    };
+    const pwNew = document.getElementById("pwNew");
+    pwNew.addEventListener("input", () => {
+      document.querySelectorAll(".pw-rules li").forEach((li) => li.classList.toggle("ok", pwRules[li.dataset.rule](pwNew.value)));
+    });
+    document.getElementById("pwShow").addEventListener("change", (e) => {
+      ["pwCurrent", "pwNew", "pwConfirm"].forEach((id) => (document.getElementById(id).type = e.target.checked ? "text" : "password"));
+    });
+    document.getElementById("changePassword").onsubmit = async (e) => {
+      e.preventDefault();
+      const form = e.target, button = form.querySelector("button[type=submit]");
+      const atual = document.getElementById("pwCurrent").value, nova = pwNew.value, conf = document.getElementById("pwConfirm").value;
+      if (!atual) return pwStatus("Digite sua senha atual.", "error");
+      if (!Object.values(pwRules).every((f) => f(nova))) return pwStatus("A nova senha ainda não atende a todos os requisitos.", "error");
+      if (nova !== conf) return pwStatus("A confirmação não bate com a nova senha.", "error");
+      button.disabled = true;
+      try {
+        const r = await cashflowRequest("/api/senha/alterar", { senha_atual: atual, nova_senha: nova, confirmar_senha: conf });
+        form.reset();
+        document.querySelectorAll(".pw-rules li").forEach((li) => li.classList.remove("ok"));
+        pwStatus("✓ " + (r?.message || "Senha alterada."), "ok");
+      } catch (error) {
+        pwStatus(error.message, "error");
+      } finally {
+        button.disabled = false;
+      }
+    };
+    document.querySelectorAll("[data-pw-link]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        b.disabled = true;
+        try {
+          const r = await cashflowRequest("/api/senha/link", {});
+          pwStatus("✉️ " + (r?.message || "Link enviado para o seu email."), "ok");
+        } catch (error) {
+          pwStatus(error.message, "error");
+        } finally {
+          setTimeout(() => (b.disabled = false), 30000);
+        }
+      }),
+    );
     document.getElementById("deleteAccount").onsubmit = async (e) => {
       e.preventDefault();
       try {
